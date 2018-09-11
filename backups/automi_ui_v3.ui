@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>480</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="25" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout"/>
+    </item>
+    <item row="19" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_15"/>
+    </item>
+    <item row="21" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_26"/>
+    </item>
+    <item row="29" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout_15"/>
+    </item>
+    <item row="29" column="14">
+     <layout class="QVBoxLayout" name="verticalLayout_19"/>
+    </item>
+    <item row="0" column="2" rowspan="29" colspan="30">
+     <layout class="QVBoxLayout" name="verticalLayout_35">
+      <item>
+       <widget class="QLabel" name="frame_label">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="29" column="24">
+     <layout class="QVBoxLayout" name="verticalLayout_39"/>
+    </item>
+    <item row="18" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_16"/>
+    </item>
+    <item row="5" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_37"/>
+    </item>
+    <item row="10" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_13"/>
+    </item>
+    <item row="12" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_34"/>
+    </item>
+    <item row="29" column="1">
+     <layout class="QVBoxLayout" name="verticalLayout_30"/>
+    </item>
+    <item row="27" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_10"/>
+    </item>
+    <item row="29" column="26">
+     <layout class="QVBoxLayout" name="verticalLayout_13"/>
+    </item>
+    <item row="29" column="18">
+     <layout class="QVBoxLayout" name="verticalLayout_24"/>
+    </item>
+    <item row="20" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_29"/>
+    </item>
+    <item row="9" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_35"/>
+    </item>
+    <item row="29" column="12">
+     <layout class="QVBoxLayout" name="verticalLayout_3"/>
+    </item>
+    <item row="8" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_36"/>
+    </item>
+    <item row="15" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_17"/>
+    </item>
+    <item row="2" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_22"/>
+    </item>
+    <item row="4" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout_51"/>
+    </item>
+    <item row="14" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_18"/>
+    </item>
+    <item row="13" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_33"/>
+    </item>
+    <item row="29" column="2">
+     <layout class="QVBoxLayout" name="verticalLayout_58">
+      <item>
+       <widget class="QPushButton" name="change_lens_button">
+        <property name="text">
+         <string>Change Lens</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="1" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_21"/>
+    </item>
+    <item row="29" column="16">
+     <layout class="QVBoxLayout" name="verticalLayout_20"/>
+    </item>
+    <item row="29" column="13">
+     <layout class="QVBoxLayout" name="verticalLayout_45"/>
+    </item>
+    <item row="17" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_30"/>
+    </item>
+    <item row="16" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_25"/>
+    </item>
+    <item row="23" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_27"/>
+    </item>
+    <item row="11" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_24"/>
+    </item>
+    <item row="24" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_14"/>
+    </item>
+    <item row="29" column="22">
+     <layout class="QVBoxLayout" name="verticalLayout_9">
+      <item>
+       <widget class="QPushButton" name="video_icon">
+        <property name="text">
+         <string>Record</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="26" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_9"/>
+    </item>
+    <item row="6" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_23"/>
+    </item>
+    <item row="0" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_20"/>
+    </item>
+    <item row="7" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_31"/>
+    </item>
+    <item row="29" column="10">
+     <layout class="QVBoxLayout" name="verticalLayout_16"/>
+    </item>
+    <item row="28" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_12"/>
+    </item>
+    <item row="3" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout_50"/>
+    </item>
+    <item row="29" column="23">
+     <layout class="QVBoxLayout" name="verticalLayout_53"/>
+    </item>
+    <item row="29" column="27">
+     <layout class="QVBoxLayout" name="verticalLayout_12"/>
+    </item>
+    <item row="29" column="25">
+     <layout class="QVBoxLayout" name="verticalLayout"/>
+    </item>
+    <item row="29" column="19">
+     <layout class="QVBoxLayout" name="verticalLayout_11"/>
+    </item>
+    <item row="29" column="9">
+     <layout class="QVBoxLayout" name="verticalLayout_47"/>
+    </item>
+    <item row="22" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_28"/>
+    </item>
+    <item row="29" column="4">
+     <layout class="QVBoxLayout" name="verticalLayout_7"/>
+    </item>
+    <item row="29" column="32">
+     <layout class="QVBoxLayout" name="verticalLayout_59"/>
+    </item>
+    <item row="29" column="21">
+     <layout class="QVBoxLayout" name="verticalLayout_22"/>
+    </item>
+    <item row="29" column="20">
+     <layout class="QVBoxLayout" name="verticalLayout_14"/>
+    </item>
+    <item row="29" column="29">
+     <layout class="QVBoxLayout" name="verticalLayout_55">
+      <item>
+       <widget class="QPushButton" name="left_button">
+        <property name="text">
+         <string>Left</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="29" column="5">
+     <layout class="QVBoxLayout" name="verticalLayout_17"/>
+    </item>
+    <item row="29" column="17">
+     <layout class="QVBoxLayout" name="verticalLayout_21"/>
+    </item>
+    <item row="29" column="28">
+     <layout class="QVBoxLayout" name="verticalLayout_6"/>
+    </item>
+    <item row="29" column="8">
+     <layout class="QVBoxLayout" name="verticalLayout_23"/>
+    </item>
+    <item row="29" column="15">
+     <layout class="QVBoxLayout" name="verticalLayout_44"/>
+    </item>
+    <item row="29" column="3">
+     <layout class="QVBoxLayout" name="verticalLayout_60"/>
+    </item>
+    <item row="29" column="11">
+     <layout class="QVBoxLayout" name="verticalLayout_43">
+      <item>
+       <widget class="QPushButton" name="camera_icon">
+        <property name="text">
+         <string>Capture</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="29" column="7">
+     <layout class="QVBoxLayout" name="verticalLayout_8"/>
+    </item>
+    <item row="29" column="31">
+     <layout class="QVBoxLayout" name="verticalLayout_57">
+      <item>
+       <widget class="QPushButton" name="right_button">
+        <property name="text">
+         <string>Right</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="29" column="30">
+     <layout class="QVBoxLayout" name="verticalLayout_52">
+      <item>
+       <widget class="QPushButton" name="forward_button">
+        <property name="text">
+         <string>Forward</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="backward_button">
+        <property name="text">
+         <string>Backward</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="29" column="6">
+     <layout class="QVBoxLayout" name="verticalLayout_25"/>
+    </item>
+    <item row="12" column="1" rowspan="17">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QSlider" name="brightness_slider">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="12" column="32" rowspan="17">
+     <layout class="QHBoxLayout" name="horizontalLayout_4">
+      <item>
+       <widget class="QSlider" name="zoom_slider">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>800</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuMenu">
+    <property name="title">
+     <string>Menu</string>
+    </property>
+    <addaction name="actionConnect_to_HDMI"/>
+    <addaction name="actionLibrary"/>
+    <addaction name="actionTurn_OFF"/>
+   </widget>
+   <widget class="QMenu" name="connected_devices_menu">
+    <property name="title">
+     <string>Connected Devices</string>
+    </property>
+   </widget>
+   <addaction name="menuMenu"/>
+   <addaction name="connected_devices_menu"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionConnect_to_HDMI">
+   <property name="text">
+    <string>Connect to HDMI</string>
+   </property>
+  </action>
+  <action name="actionLibrary">
+   <property name="text">
+    <string>Library</string>
+   </property>
+  </action>
+  <action name="actionTurn_OFF">
+   <property name="text">
+    <string>Turn OFF</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
