@@ -11,6 +11,7 @@ import sys
 from PyQt5 import QtWidgets
 from PyQt5 import QtGui
 from PyQt5 import QtCore
+from PyQt5.QtCore import QThread
 
 import server
 import automi_ui
@@ -26,6 +27,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
 
         self.recording = False
         self.controlled_by = ""
+        self.video_name = ""
+        self.image_name = "image_"
 
         self.camera = Camera(0)
         self.camera.start()
@@ -62,9 +65,9 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
     def _setup_signals(self):
         # Connect to thread signals. This functions are automatically called when a signal is emitted from the thread
         self.camera_thread.ready_frame.connect(self._update_frame)
-        self.video_server_thread.client_accepted.connect(lambda: self._update_client_menu())
+        self.video_server_thread.client_accepted.connect(self._update_client_menu)
         self.video_server_thread.client_disconnected.connect(self._remove_client_menu)
-        self.video_server_thread.received_command.connect(lambda: self._process_command)
+        self.video_server_thread.received_command.connect(lambda: self._process_command())
         # self.comm_server_thread.received_command.connect(lambda: self._process_command)
         # self.comm_server_thread.client_accepted.connect(lambda: self._update_client_menu(self.comm_server.clients[self.comm_server.client_id][1]))
         # self.camera_thread.ready_frame.connect(self._save_video)
@@ -74,40 +77,51 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self.video_icon.clicked.connect(lambda: self._start_recording())
 
     def _update_client_menu(self):
+        self.connected_devices_menu.clear()
+        self.statusbar.showMessage("Client: {client} Connected.".format(client=self.video_server.clients[self.video_server_thread.newly_added_client]['name']))
         for client in self.video_server.clients:
-            menu = self.connected_devices_menu.addMenu(client['name'])
+            name = self.video_server.clients[client]['name']
+            menu = self.connected_devices_menu.addMenu(name)
             action = menu.addAction("Grant Control")
-            action.triggered.connect(lambda: self._grant_control(client['name']))
+            action.triggered.connect(lambda: self._grant_control(name))
+        # menu = self.connected_devices_menu.addMenu(self.video_server.clients[len(self.video_server.clients)-1]['name'])
+        # action = menu.addAction("Grant Control")
+        # action.triggered.connect(lambda: self._grant_control(self.video_server.clients[len(self.video_server.clients)-1]['name']))
 
     def _remove_client_menu(self):
         conn = self.video_server_thread.client_to_remove
         self.video_server.clients = conn
-        self.connected_devices_menu.clear()
+        self._update_client_menu()
 
     def _grant_control(self, client_name):
+        print('Granting controll to')
         self.controlled_by = client_name
 
     def _process_command(self):
-        name, command = self.video_server_thread.command_queue
+        # print('Processing command...')
+        name = self.video_server_thread.command['name']
+        command = self.video_server_thread.command['command']
+
         if self.controlled_by == name:
             print("Executing command:{command} from:{name}".format(name=name, command=command))
-        else:
-            print("User:{name} is not permitted.".format(name=name))
+        # else:
+        #     print("User:{name} is not permitted.".format(name=name))
 
     def _start_recording(self):
         # uniq_id = QtCore.QDateTime.currentDateTime().toSecsSinceEpoch()
-        uniq_id = str(uuid.uuid4().hex)
+        if not self.recording:
+            self.video_name = str(uuid.uuid4().hex)
         self.recording = not self.recording
         if self.recording:
 
             res = (640, 480)
             frame_rate = 20.0
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            self.writer = cv2.VideoWriter('video_{ext}.avi'.format(ext=uniq_id), fourcc, frame_rate, res)
-            self.statusbar.showMessage("Recording Video: video_{ext}.mp4".format(ext=uniq_id))
+            self.writer = cv2.VideoWriter('video_{ext}.avi'.format(ext=self.video_name), fourcc, frame_rate, res)
+            self.statusbar.showMessage("Recording Video: video_{ext}.mp4".format(ext=self.video_name))
             self.video_icon.setStyleSheet("background-color: red")
         else:
-            self.statusbar.showMessage("Done Recording Video: video_{ext}.mp4".format(ext=uniq_id))
+            self.statusbar.showMessage("Done Recording Video: video_{ext}.mp4".format(ext=self.video_name))
             self.video_icon.setStyleSheet("background-color: white")
 
     def _save_video(self):
@@ -124,8 +138,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
 
             frame = self.camera_thread.image_raw
 
-            cv2.imwrite('image_{0}.png'.format(uniq_id), frame)
-            self.statusbar.showMessage("Saving Image: image_{0}.png".format(uniq_id))
+            cv2.imwrite('{0}_{1}.png'.format(self.image_name, uniq_id), frame)
+            self.statusbar.showMessage("Saving Image: {0}_{1}.png".format(self.image_name, uniq_id))
         else:
             print('CameraErr: Camera is turned off.')
 
@@ -135,10 +149,12 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         font_size = 0.5
         thickness = 1
         color = (255, 255, 255)
-        location = (10, 15)
-        text = "{ip}:{port_1}".format(ip=self.ip, port_1=self.video_port)
+        location = (4, 15+5)
+        text = "Connection: {ip}:{port_1}".format(ip=self.ip, port_1=self.video_port)
         cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
-
+        location = (4, 36+5)
+        text = "Controller: {control}".format(control=self.controlled_by)
+        cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
         try:
             height, width, channel = frame.shape
             bytes_per_line = 3 * width
@@ -195,8 +211,9 @@ class VideoServerThread(QtCore.QThread):
         self._server = video_server
         self._frame = None
 
-        self._command_queue = queue.Queue(50)
+        self._command = {'name': '', 'command': ''}
         self.client_to_remove = None
+        self.newly_added_client = None
 
     def __del__(self):
         self.wait()
@@ -210,8 +227,10 @@ class VideoServerThread(QtCore.QThread):
         while self._server.is_listening:
             print("Waiting for connections at: {0}".format(self._server.address))
             conn, addr = self._server.accept_connection()
+            name = self._server.clients[conn]['name']
+            self.newly_added_client = conn
             client_handler_thread = threading.Thread(
-                name="client-video-thread: {name}".format(name=self._server.clients[conn]['name']),
+                name="client-video-thread: {name}".format(name=name),
                 target=self._client_handler,
                 args=(conn,)
             )
@@ -228,23 +247,32 @@ class VideoServerThread(QtCore.QThread):
 
     def _client_handler(self, conn):
         with conn:
+            sent = True
             try:
-                if self._command_queue.full():
-                    self._command_queue.get()
-                else:
+                while sent:
+                    # if self._command.full():
+                    #     # print('Command Queue is full')
+                    #     self._command.get()
+                    # else:
                     try:
-                        command = conn.recv(1024)
-                        self._command_queue.put(
-                            self._server.clients[conn]['name'],
-                            command
-                        )
-                        self.received_command.emit()
+                        # print('Receiving command...')
+                        command = conn.recv(126)
+                        command = command.decode()
+                        if command == 'alive':
+                            pass
+                        else:
+                            self._command['name'] = self._server.clients[conn]['name']
+                            self._command['command'] = command
+                            self.received_command.emit()
                     except socket.error:
                         print("Client: No Response.")
 
-                sent = self._server.send_frame(conn, self._camera.image_byte)
-                while sent:
+                    # print('Sending frame')
+                    QThread.sleep(0.024)  # 24 frames per second
+                    QThread.sleep(0.5)  # 2 frames per second
                     sent = self._server.send_frame(conn, self._camera.image_byte)
+                    # while sent:
+                    #     sent = self._server.send_frame(conn, self._camera.image_byte)
             except socket.error:
                 self.client_to_remove = conn
                 self.client_disconnected.emit()
@@ -255,13 +283,13 @@ class VideoServerThread(QtCore.QThread):
 
     def _client_receiver(self, conn):
         while conn:
-            if self._command_queue.full():
-                self._command_queue.get()
+            if self._command.full():
+                self._command.get()
             else:
                 try:
                     print('Waiting for command from {name}'.format(name=self._server.clients[conn]['name']))
                     command = conn.recv(1024)
-                    self._command_queue.put(
+                    self._command.put(
                         self._server.clients[conn]['name'],
                         command)
                     print('Command Received.')
@@ -270,8 +298,8 @@ class VideoServerThread(QtCore.QThread):
                     print("No command")
 
     @property
-    def command_queue(self):
-        return self._command_queue.get()
+    def command(self):
+        return self._command
 
 class CameraThread(QtCore.QThread):
     ready_frame = QtCore.pyqtSignal()
@@ -374,7 +402,9 @@ class Camera:
 
     @frame_queue.setter
     def frame_queue(self, frame):
-        retval, buffer = cv2.imencode('.jpg', frame)
+        # retval, buffer = cv2.imencode('.jpg', frame)
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 40]
+        retval, buffer = cv2.imencode('.jpg', frame, encode_param)
         if retval:
             image_bytes = base64.b64encode(buffer)
             frame = image_bytes

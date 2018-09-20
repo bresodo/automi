@@ -58,7 +58,7 @@ class VideoServer:
         conn, addr = self._socket.accept()
         self.logger.debug("Connection accepted at {}:{}".format(self.address[0], self.address[1]))
         self.logger.debug("Receiving client name.")
-        name = conn.recv(1024).decode('utf-8')  # Get name of client
+        name = conn.recv(128).decode('utf-8')  # Get name of client
         self.logger.debug("Client name:{name} received.".format(name=name))
         self._clients[conn] = {'conn': conn, 'addr': addr, 'name': name}
         self.latest_connection = conn
