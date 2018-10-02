@@ -1,31 +1,37 @@
 import cv2
-import imutils
-def Zoom(cv2Object, zoomSize):
-    # Resizes the image/video frame to the specified amount of "zoomSize".
-    # A zoomSize of "2", for example, will double the canvas size
-    cv2Object = imutils.resize(cv2Object, width=(zoomSize * cv2Object.shape[1]))
-    # center is simply half of the height & width (y/2,x/2)
-    center = (cv2Object.shape[0]/2,cv2Object.shape[1]/2)
-    # cropScale represents the top left corner of the cropped frame (y/x)
-    cropScale = (center[0]/zoomSize, center[1]/zoomSize)
-    # The image/video frame is cropped to the center with a size of the original picture
-    # image[y1:y2,x1:x2] is used to iterate and grab a portion of an image
-    # (y1,x1) is the top left corner and (y2,x1) is the bottom right corner of new cropped frame.
-    cv2Object = cv2Object[cropScale[0]:(center[0] + cropScale[0]), cropScale[1]:(center[1] + cropScale[1])]
-    return cv2Object
-
 
 cap = cv2.VideoCapture(0)
-retval, frame = cap.read()
-# scale = 1
-# height, width, channel = frame.shape
-# centerX, centerY = int(height / 2), int(width / 2)
-# radiusX, radiusY = int(scale * height / 100), int(scale * width / 100)
-# minX, maxX = centerX - radiusX, centerX + radiusX
-# minY, maxY = centerY - radiusY, centerY + radiusY
-# cropped = frame[minX:maxX, minY:maxY]
-# cropped_zoom =  cv2.resize(frame,(width, height), interpolation=cv2.INTER_LINEAR)
-frame = Zoom(frame, 2)
-cv2.imshow("Cropped-Zoomed", frame)
-cv2.waitKey()
 
+ret, frame = cap.read()
+h, w = frame.shape[:2]
+center = (w/2, h/2)
+print(center)
+
+frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+cv2.putText(img = frame, text = 'How are you', org = (int(frameWidth/2 - 20),int(frameHeight/2)), fontFace = cv2.FONT_HERSHEY_DUPLEX, fontScale = 3,
+                    color = (0, 255, 0))
+cv2.namedWindow('orig', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('orig', (600, 480))
+cv2.imshow('orig', frame)
+
+# crop_img = frame[70:170, 440:540]  # Vertical, Horizontal
+# cv2.imshow('cropped', crop_img)
+
+cv2.namedWindow('failed', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('failed', (600, 480))
+crop_img = frame[int(center[0])-50:int(center[0])+50, int(center[1])-50:int(center[1])+50]  # Vertical, Horizontal
+cv2.imshow('failed', crop_img)
+
+cv2.namedWindow('cropped', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('cropped', (600, 480))
+r = 100.0 / frame.shape[1]
+dim = (100, int(frame.shape[0] * r))
+zoom = 50
+crop_img = frame[int(center[1]) - zoom:int(center[1]) + zoom, int(center[0]) - zoom:int(center[0]) + zoom]  # Vertical, Horizontal
+crop_img = cv2.resize(crop_img, dim, interpolation = cv2.INTER_AREA)
+cv2.imshow('cropped', crop_img)
+
+cv2.waitKey()
+cap.release()

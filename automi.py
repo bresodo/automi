@@ -62,6 +62,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self.frame_label.setScaledContents(True)
         self.frame_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
 
+        self.zoom_slider.setMaximum(199)
+
     def _setup_signals(self):
         # Connect to thread signals. This functions are automatically called when a signal is emitted from the thread
         self.camera_thread.ready_frame.connect(self._update_frame)
@@ -75,10 +77,12 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         # Connect control signals
         self.camera_icon.clicked.connect(lambda: self._capture_image(1))
         self.video_icon.clicked.connect(lambda: self._start_recording())
+        self.zoom_slider.valueChanged.connect(self._set_zoom)
 
     def _update_client_menu(self):
         self.connected_devices_menu.clear()
-        self.statusbar.showMessage("Client: {client} Connected.".format(client=self.video_server.clients[self.video_server_thread.newly_added_client]['name']))
+        # self.statusbar.showMessage("Client: {client} Connected.".format(
+        #     client=self.video_server.clients[self.video_server_thread.newly_added_client]['name']))
         for client in self.video_server.clients:
             name = self.video_server.clients[client]['name']
             menu = self.connected_devices_menu.addMenu(name)
@@ -94,7 +98,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self._update_client_menu()
 
     def _grant_control(self, client_name):
-        print('Granting controll to')
+        print('Granting controll to' + client_name)
         self.controlled_by = client_name
 
     def _process_command(self):
@@ -104,8 +108,23 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
 
         if self.controlled_by == name:
             print("Executing command:{command} from:{name}".format(name=name, command=command))
+            if command == 'zoom-in':
+                if self.zoom_slider.value() < 200:
+                    self.zoom_slider.setValue(self.zoom_slider.value() + 1)
+                else:
+                    print('Cannot zoom-in any further...')
+            elif command == 'zoom-out':
+                if self.zoom_slider.value() > 0:
+                    self.zoom_slider.setValue(self.zoom_slider.value() - 1)
+                else:
+                    print('Cannot zoom-out any further...')
+
         # else:
         #     print("User:{name} is not permitted.".format(name=name))
+
+    def _set_zoom(self):
+        self.camera.zoom = self.zoom_slider.value()
+        print(self.camera.zoom)
 
     def _start_recording(self):
         # uniq_id = QtCore.QDateTime.currentDateTime().toSecsSinceEpoch()
@@ -150,11 +169,12 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         thickness = 1
         color = (255, 255, 255)
         location = (4, 15+5)
-        text = "Connection: {ip}:{port_1}".format(ip=self.ip, port_1=self.video_port)
-        cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
-        location = (4, 36+5)
-        text = "Controller: {control}".format(control=self.controlled_by)
-        cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
+        if self.camera.zoom == 0:
+            text = "Connection: {ip}:{port_1}".format(ip=self.ip, port_1=self.video_port)
+            cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
+            location = (4, 36 + 5)
+            text = "Controller: {control}".format(control=self.controlled_by)
+            cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
         try:
             height, width, channel = frame.shape
             bytes_per_line = 3 * width
@@ -164,6 +184,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             self.frame_label.setPixmap(pixmap)
         except:
             print("Main: No Frame to convert")
+
 
 class CommunicationServerThread(QtCore.QThread):
     client_accepted = QtCore.pyqtSignal()
@@ -269,7 +290,7 @@ class VideoServerThread(QtCore.QThread):
 
                     # print('Sending frame')
                     QThread.sleep(0.024)  # 24 frames per second
-                    QThread.sleep(0.5)  # 2 frames per second
+                    # QThread.sleep(0.5)  # 2 frames per second
                     sent = self._server.send_frame(conn, self._camera.image_byte)
                     # while sent:
                     #     sent = self._server.send_frame(conn, self._camera.image_byte)
@@ -335,7 +356,7 @@ class CameraThread(QtCore.QThread):
         return frame
 
     @property
-    def image_raw(self):  # Returns an an-altered frame
+    def image_raw(self):  # Returns an un-altered frame
         return self._raw_frame
 
     @property
@@ -349,6 +370,7 @@ class Camera:
         self._camera_index = index
         self._started = False
         self._capture = None
+        self._zoom = 0
         self._frame_queue = queue.Queue(5)
 
     def start(self):
@@ -374,7 +396,8 @@ class Camera:
         """Returns an opencv numpy array frame. If false returns -1"""
         if self._started:
             ok, raw_frame = self._capture.read()
-
+            if self._zoom > 0:
+                raw_frame = self._zoom_image(raw_frame)
             if ok:
                 frame = raw_frame
                 self.frame_queue = frame
@@ -391,6 +414,26 @@ class Camera:
             return True, frame
         else:
             return False, None
+
+    def _zoom_image(self, frame):
+        h, w = frame.shape[:2]
+        center = ((w / 2), (h / 2))
+        zoom = 200
+        zoom -= self._zoom
+        r = 100.0 / frame.shape[1]
+        dim = (100, int(frame.shape[0] * r))
+        crop_img = frame[int(center[1]) - zoom:int(center[1]) + zoom,
+                         int(center[0]) - zoom:int(center[0]) + zoom]  # Vertical, Horizontal
+        crop_img = cv2.resize(crop_img, dim, interpolation=cv2.INTER_AREA)
+        return crop_img
+
+    @property
+    def zoom(self):
+        return self._zoom
+
+    @zoom.setter
+    def zoom(self, zoom):
+        self._zoom = zoom
 
     @property
     def started(self):
