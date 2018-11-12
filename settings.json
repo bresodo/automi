@@ -1,0 +1,38 @@
+{
+	"updown_slider": {
+		"position": 0,
+		"max_position": 50,
+		"min_position": 0
+	},
+	"zoom_slider": {
+		"position": 68,
+		"max_position": 199,
+		"min_position": 0
+	},
+	"brightness_slider": {
+		"position": 0,
+		"max_position": 199,
+		"min_position": 0
+	},
+	"lens": {
+	  	"position": 0,
+		"current_lens": 0,
+        "pins": {
+
+        }
+	},
+	"forward-backward_button": {
+		"position": 0,
+		"steps": 10
+	},
+	"left-right_button": {
+		"position": 140,
+		"steps": 10
+	},
+	"video_port": 9766,
+	"directories": {
+		"images": "files/images",
+		"videos": "files/videos",
+		"icons": "icons/"
+	}
+}

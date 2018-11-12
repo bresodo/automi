@@ -4,6 +4,7 @@ import queue
 import socket
 import threading
 import uuid
+import json
 
 import cv2
 import sys
@@ -12,6 +13,7 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 from PyQt5.QtCore import QThread
+from PyQt5.QtGui import QIcon, QPixmap
 
 import server
 import automi_ui
@@ -21,7 +23,15 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
     def __init__(self):
         super(self.__class__, self).__init__()
         self.setupUi(self)
-        self.ip = (([ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")] or [[(s.connect(("8.8.8.8", 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]]) + ["no IP found"])[0]
+        self._settings = None
+
+        try:
+            self.ip = (([ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if
+                         not ip.startswith("127.")] or [
+                         [(s.connect(("8.8.8.8", 53)), s.getsockname()[0], s.close()) for s in
+                         [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]]) + ["no IP found"])[0]
+        except:
+            print('Please connect to a network.')
         self.video_port = 9766
         self.comm_port = self.video_port+10
 
@@ -29,6 +39,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self.controlled_by = ""
         self.video_name = ""
         self.image_name = "image_"
+
+        self._commands_queue = queue.Queue()
 
         self.camera = Camera(0)
         self.camera.start()
@@ -41,8 +53,13 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self.camera_thread.start()
         self.video_server_thread = VideoServerThread(self.video_server, self.camera_thread)
         self.video_server_thread.start()
+        self.command_processing_thread = threading.Thread(target=self._command_worker)
+        self.command_processing_thread.start()
         # self.comm_server_thread = CommunicationServerThread(self.comm_server)
         # self.comm_server_thread.start()
+
+        self._init_settings()
+        self._init_style()
 
         self._setup_widgets()
         self._setup_signals()
@@ -58,11 +75,27 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         # self.comm_server.stop()
         QCloseEvent.accept()
 
+    def closeEvent(self, event):
+        self._save_settings()
+        self._add_command(None, None, None)
+        print('Exiting...')
+
     def _setup_widgets(self):
         self.frame_label.setScaledContents(True)
         self.frame_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
 
-        self.zoom_slider.setMaximum(199)
+        self.zoom_slider.setMaximum(self._settings['zoom_slider']['max_position'])
+        self.zoom_slider.setMinimum(self._settings['zoom_slider']['min_position'])
+        self.zoom_slider.setSliderPosition(self._settings['zoom_slider']['position'])
+        self._set_zoom()
+
+        self.updown_slider.setMaximum(self._settings['updown_slider']['max_position'])
+        self.updown_slider.setMinimum(self._settings['updown_slider']['min_position'])
+        self.updown_slider.setSliderPosition(self._settings['updown_slider']['position'])
+
+        self.brightness_slider_2.setMaximum(self._settings['brightness_slider']['max_position'])
+        self.brightness_slider_2.setMinimum(self._settings['brightness_slider']['min_position'])
+        self.brightness_slider_2.setSliderPosition(self._settings['brightness_slider']['position'])
 
     def _setup_signals(self):
         # Connect to thread signals. This functions are automatically called when a signal is emitted from the thread
@@ -77,7 +110,29 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         # Connect control signals
         self.camera_icon.clicked.connect(lambda: self._capture_image(1))
         self.video_icon.clicked.connect(lambda: self._start_recording())
+
+        # Forward-Backward Button
+        self.forward_button.clicked.connect(lambda: self._move_stage('fb', 'inc'))
+        self.backward_button.clicked.connect(lambda: self._move_stage('fb', 'dec'))
+        # Left-Right Button
+        self.left_button.clicked.connect(lambda: self._move_stage('lr', 'inc'))
+        self.right_button.clicked.connect(lambda: self._move_stage('lr', 'dec'))
+
+        self.change_lens_button.clicked.connect(self._change_lens)
         self.zoom_slider.valueChanged.connect(self._set_zoom)
+        self.updown_slider.valueChanged.connect(self._set_updown)
+
+    def _init_style(self):
+        pass
+
+    def _init_settings(self):
+        with open("settings.json", "r") as read:
+            self._settings = json.load(read)
+        self.video_port = self._settings['video_port']
+
+    def _save_settings(self):
+        with open("settings.json", 'w') as file:
+            json.dump(self._settings, file)
 
     def _update_client_menu(self):
         self.connected_devices_menu.clear()
@@ -94,6 +149,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
 
     def _remove_client_menu(self):
         conn = self.video_server_thread.client_to_remove
+        if self.controlled_by == self.video_server.clients[conn]['name']:
+            self.controlled_by = ""
         self.video_server.clients = conn
         self._update_client_menu()
 
@@ -101,66 +158,205 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         print('Granting controll to' + client_name)
         self.controlled_by = client_name
 
+    def _add_command(self, type, command, value):
+        print('Adding Command!')
+        self._commands_queue.put([type, command, value])
+
+    def _command_worker(self):
+        while True:
+            cmd = self._commands_queue.get()
+            if cmd[0] is None:
+                self._commands_queue.task_done()
+                break
+            self._execute_command(cmd)
+            self._commands_queue.task_done()
+
+    def _execute_command(self, data):
+        type = data[0]  # Button, Slider
+        command = data[1]
+        value = data[2]
+        if type == 'button':
+            if command == 'lr':
+                self._move_stage(command, value)
+            elif command == 'fb':
+                self._move_stage(command, value)
+        elif type == 'slider':
+            if command == 'updown':
+                self._set_updown()
+
     def _process_command(self):
         # print('Processing command...')
         name = self.video_server_thread.command['name']
         command = self.video_server_thread.command['command']
-
         if self.controlled_by == name:
-            print("Executing command:{command} from:{name}".format(name=name, command=command))
-            if command == 'zoom-in':
-                if self.zoom_slider.value() < 200:
-                    self.zoom_slider.setValue(self.zoom_slider.value() + 1)
-                else:
-                    print('Cannot zoom-in any further...')
-            elif command == 'zoom-out':
-                if self.zoom_slider.value() > 0:
-                    self.zoom_slider.setValue(self.zoom_slider.value() - 1)
-                else:
-                    print('Cannot zoom-out any further...')
+            # print("Executing command:{command} from:{name}".format(name=name, command=command))
+            # regex = "[a-z]+"
+            # command_type = re.match(regex, command)[0]
+            command = command.split(":")
+            command_type = command[0]
+            if command_type == 'zoom':
+                # value = "[0-9]+"
+                # command_value = int(re.search(value, command)[0])
+                command_value = int(command[1])
+                self.camera.zoom = command_value
+                self.zoom_slider.setValue(command_value)
+            elif command_type == 'brightness':
+                command_value = int(command[1])
+                self.brightness_slider_2.setValue(command_value)
+            elif command_type == 'forward':
+                self._move_stage('fb', 'inc')
+                # self._move_forback('forward')
+            elif command_type == 'backward':
+                self._move_stage('fb', 'decc')
+                # self._move_forback('backward')
+            elif command_type == 'left':
+                self._move_stage('lr', 'inc')
+                # self._move_leftright('left')
+            elif command_type == 'right':
+                self._move_stage('lr', 'dec')
+                # self._move_leftright('right')
+            elif command_type == 'up':
+                if self._settings['updown_slider']['position'] < self._settings['updown_slider']['max_position']:
+                    self._settings['updown_slider']['position'] += 1
+                    self.updown_slider.setValue(self._settings['updown_slider']['position'])
+            elif command_type == 'down':
+                if self._settings['updown_slider']['position'] > self._settings['updown_slider']['min_position']:
+                    self._settings['updown_slider']['position'] -= 1
+                    self.updown_slider.setValue(self._settings['updown_slider']['position'])
 
         # else:
         #     print("User:{name} is not permitted.".format(name=name))
 
+    def _move_stage(self, direction, action):
+        setting_name = {
+            "lr": ['left-right_button', None],
+            "fb": ['forward-backward_button', None],
+        }
+        # servo = self.leftright_servo
+        position = self._settings[setting_name[direction][0]]['position']
+        step = self._settings[setting_name[direction][0]]['steps']
+        if action == 'inc' and position < 180:
+            position += step
+        elif action == 'dec' and position > 0:
+            position -= step
+        # servo.set_angle(position)
+        print(position)
+        self._settings[setting_name[direction][0]]['position'] = position
+
+    # def _move_leftright(self, direc):
+    #     position = self._settings['left-right_button']['position']
+    #     step = self._settings['left-right_button']['steps']
+    #     if direc == 'left':
+    #         print('Move: Left({pos})'.format(pos=position))
+    #         position -= step
+    #     elif direc == 'right':
+    #         print('Move: Right({pos})'.format(pos=position))
+    #         position += step
+    #     else:
+    #         print('Error: Invalid Direction.')
+    #     self._settings['left-right_button']['position'] = position
+    #
+    # def _move_forback(self, direc):
+    #     position = self._settings['forward-backward_button']['position']
+    #     step = self._settings['left-right_button']['steps']
+    #     if direc == 'forward':
+    #         print('Move: Forward({pos})'.format(pos=position))
+    #         position -= step
+    #     elif direc == 'backward':
+    #         print('Move: Backward({pos})'.format(pos=position))
+    #         position += step
+    #     else:
+    #         print('Error: Invalid Direction.')
+    #     self._settings['forward-backward_button']['position'] = position
+
+    def _change_lens(self):
+        lens_index = self._settings['lens']['current_lens']
+        if lens_index == 0:
+            # Rotate Servo
+            print('Changing Lens: 0')
+        elif lens_index == 1:
+            # Rotate Servo
+            print('Changing Lens: 1')
+        elif lens_index == 2:
+            # Rotate Servo
+            print('Changing Lens: 2')
+
     def _set_zoom(self):
         self.camera.zoom = self.zoom_slider.value()
-        print(self.camera.zoom)
+        self._settings['zoom_slider']['position'] = self.zoom_slider.value()
+
+    def _set_updown(self):
+        steps = None
+        direction = None
+
+        new_position = self.updown_slider.value()
+        current_position = self._settings['updown_slider']['position']
+
+        if new_position >= current_position:
+            direction = "up"
+            steps = new_position - current_position
+        elif new_position <= current_position:
+            direction = "down"
+            steps = current_position - new_position
+
+        for step in range(steps):
+            if direction == "up" and current_position < self._settings['updown_slider']['max_position']:
+                current_position += 1
+                print('Current Position(Up): ' + str(current_position))
+            elif direction == "down" and current_position > self._settings['updown_slider']['min_position']:
+                current_position -= 1
+                print('Current Position(Down): ' + str(current_position))
+            else:
+                print("Limit Reach!")
+                break
+            self._settings['updown_slider']['position'] = current_position
+
+        print('New Position' + str(self._settings['updown_slider']['position']))
 
     def _start_recording(self):
         # uniq_id = QtCore.QDateTime.currentDateTime().toSecsSinceEpoch()
+        icon = QIcon()
+        self.video_icon.setIcon(icon)
         if not self.recording:
             self.video_name = str(uuid.uuid4().hex)
         self.recording = not self.recording
         if self.recording:
-
             res = (640, 480)
             frame_rate = 20.0
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            self.writer = cv2.VideoWriter('video_{ext}.avi'.format(ext=self.video_name), fourcc, frame_rate, res)
-            self.statusbar.showMessage("Recording Video: video_{ext}.mp4".format(ext=self.video_name))
-            self.video_icon.setStyleSheet("background-color: red")
+            self.writer = cv2.VideoWriter('videos/video_{ext}.avi'.format(ext=self.video_name), fourcc, frame_rate, res)
+            self.statusbar.showMessage("Recording Video: video_{ext}.avi".format(ext=self.video_name))
+            icon.addPixmap(QPixmap('{baseDir}/VIDON.png'.format(baseDir=self._settings['directories']['icons'])))
+            self.video_icon.setIcon(icon)
+            # self.video_icon.setStyleSheet("background-color: red")
         else:
-            self.statusbar.showMessage("Done Recording Video: video_{ext}.mp4".format(ext=self.video_name))
-            self.video_icon.setStyleSheet("background-color: white")
-
-    def _save_video(self):
-        if self.recording:
-            try:
-                self.writer.write(self.camera_thread.image_raw)
-            except IOError:
-                print("Done saving.")
+            self.statusbar.showMessage("Done Recording Video: video_{ext}.avi".format(ext=self.video_name))
+            icon.addPixmap(QPixmap('{baseDir}VIDOFF.png'.format(baseDir=self._settings['directories']['icons'])))
+            self.video_icon.setIcon(icon)
+            # self.video_icon.setStyleSheet("background-color: white")
+    #
+    # def _save_video(self):
+    #     if self.recording:
+    #         try:
+    #             self.writer.write(self.camera_thread.image_raw)
+    #         except IOError:
+    #             print("Done saving.")
 
     def _capture_image(self, amount):
         # uniq_id = QtCore.QDateTime.currentDateTime().toSecsSinceEpoch()
         uniq_id = str(uuid.uuid4().hex)
+        icon = QIcon()
+        icon.addPixmap(QPixmap("{baseDir}camONN.png".format(baseDir=self._settings['directories']['icons'])), QIcon.Active)
+        self.camera_icon.setIcon(icon)
         if self.camera.started:
-
             frame = self.camera_thread.image_raw
 
-            cv2.imwrite('{0}_{1}.png'.format(self.image_name, uniq_id), frame)
+            cv2.imwrite('{baseDir}{name}_{id}.png'.format(baseDir=self._settings['directories']['images'], name=self.image_name, id=uniq_id), frame)
             self.statusbar.showMessage("Saving Image: {0}_{1}.png".format(self.image_name, uniq_id))
         else:
-            print('CameraErr: Camera is turned off.')
+            icon.addPixmap(QPixmap("{baseDir}camOFFF.png").format(baseDir=self._settings['directories']['icons']))
+            self.camera_icon.setIcon(icon)
+            print('CameraEvrr: Camera is turned off.')
 
     def _update_frame(self):
         frame = self.camera_thread.image_raw
@@ -184,6 +380,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             self.frame_label.setPixmap(pixmap)
         except:
             print("Main: No Frame to convert")
+
+
 
 
 class CommunicationServerThread(QtCore.QThread):
@@ -282,9 +480,11 @@ class VideoServerThread(QtCore.QThread):
                         if command == 'alive':
                             pass
                         else:
-                            self._command['name'] = self._server.clients[conn]['name']
-                            self._command['command'] = command
-                            self.received_command.emit()
+                            if command:
+                                print(command)
+                                self._command['name'] = self._server.clients[conn]['name']
+                                self._command['command'] = command
+                                self.received_command.emit()
                     except socket.error:
                         print("Client: No Response.")
 
@@ -463,6 +663,10 @@ if __name__ == "__main__":
     size = screen.size()
     print("Screen Resolution: {0} x {1}".format(size.width(), size.height()))
     window = Window()
+    window.setStyleSheet("color: white;"
+                        "background-color: #3a4055;"
+                        "selection-color: red;"
+                        "selection-background-color: white;")
     # window.setGeometry(0, 0, size.width()/2, size.height()/2)
     window.show()
     sys.exit(app.exec_())

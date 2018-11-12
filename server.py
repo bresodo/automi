@@ -58,7 +58,11 @@ class VideoServer:
         conn, addr = self._socket.accept()
         self.logger.debug("Connection accepted at {}:{}".format(self.address[0], self.address[1]))
         self.logger.debug("Receiving client name.")
-        name = conn.recv(128).decode('utf-8')  # Get name of client
+        name = conn.recv(32).decode('utf-8')  # Get name of client
+        for client in self._clients:
+            if self._clients[client]['name'] == name:
+                self.logger.debug("accept_connection: Client already exists.")
+                return
         self.logger.debug("Client name:{name} received.".format(name=name))
         self._clients[conn] = {'conn': conn, 'addr': addr, 'name': name}
         self.latest_connection = conn
@@ -108,6 +112,7 @@ class VideoServer:
     @property
     def is_listening(self):
         return self._is_listening
+
 
 class CommunicationServer:
     def __init__(self, ip, port):
