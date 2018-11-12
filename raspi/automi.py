@@ -258,14 +258,19 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             "fb": ['forward-backward_button', self.leftright_servo],
         }
         servo = self.leftright_servo
-        position = self._settings[setting_name[direction][0]]['position']
+        pre_position = self._settings[setting_name[direction][0]]['position']
+        post_position = pre_position
         step = self._settings[setting_name[direction][0]]['steps']
-        if action == 'inc' and position < 180:
-            position += step
-        elif action == 'dec' and position > 0:
-            position -= step
-        servo.set_angle(position)
-        self._settings[setting_name[direction][0]]['position'] = position
+        half_step = None
+        if action == 'inc' and post_position < 180:
+            post_position += step
+            half_step = 1
+        elif action == 'dec' and post_position > 0:
+            post_position -= step
+            half_step = -1
+        for i in range(pre_position, post_position, half_step):
+            servo.set_angle(i+half_step)
+        self._settings[setting_name[direction][0]]['position'] = post_position
     # def _move_leftright(self, direc):
     #     position = self._settings['left-right_button']['position']
     #     if direc == 'left':
