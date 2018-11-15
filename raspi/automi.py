@@ -139,7 +139,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self.left_button.clicked.connect(lambda: self._add_command('button', 'lr', 'inc'))
         self.right_button.clicked.connect(lambda: self._add_command('button', 'lr', 'dec'))
         # Lens Button
-        self.change_lens_button.clicked.connect(self._change_lens)
+        self.change_lens_button.clicked.connect(lambda: self._commands_queue.put(['button', 'cl', None]))
         # Zoom Button
         self.zoom_slider.valueChanged.connect(self._set_zoom)
         # Up/Down Slider
@@ -152,6 +152,27 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         with open("settings.json", "r") as read:
             self._settings = json.load(read)
         self.video_port = self._settings['video_port']
+        steppers_settings = {
+            'function': [
+                self.updown_motor, self.nosepiece_motor,
+            ],
+            'steppers': [
+                'updown_slider', 'lens',
+            ],
+            'settings': [
+                "dir", "step", "step_angle", "delay", "resolution", "mode_pins",
+            ],
+        }
+        for x in range(len(steppers_settings['steppers'])):
+            print('Setting up setting for ' + steppers_settings['steppers'][x])
+            stepper = steppers_settings['function'][x]
+            for y in range(len(steppers_settings['settings'])):
+                print(steppers_settings['settings'][y])
+                stepper.change_setting(
+                    'dir',
+                    self._settings[steppers_settings['steppers'][x]]['pins'][steppers_settings['settings'][y]])
+            stepper.setup_pins()
+
 
     def _save_settings(self):
         with open("settings.json", 'w') as file:
@@ -203,7 +224,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             elif command == 'fb':
                 self._move_stage(command, value)
             elif command == 'cl':
-                self.nosepiece_motor.step_rotate(value)
+                self._change_lens()
         elif type == 'slider':
             print('Working')
             if command == 'updown':
@@ -312,8 +333,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             print('Changing Lens: 0->1')
             lens_index = 1
             while current_position < self._settings['lens']['position']['static'][0]:
-                self._commands_queue.put(['button', 'cl', 'cw'])
                 current_position += 1
+                self.nosepiece_motor.step_rotate('cw')
                 self._settings['lens']['position']['dynamic'] = current_position
 
         elif lens_index == 1:
@@ -321,7 +342,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             print('Changing Lens: 1->2')
             lens_index = 2
             while current_position < self._settings['lens']['position']['static'][1]:
-                self._commands_queue.put(['button', 'cl', 'cw'])
+                current_position += 1
+                self.nosepiece_motor.step_rotate('cw')
                 self._settings['lens']['position']['dynamic'] = current_position
 
         elif lens_index == 2:
@@ -329,7 +351,8 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             print('Changing Lens: 2->0')
             lens_index = 0
             while current_position < self._settings['lens']['position']['static'][2]:
-                self._commands_queue.put(['button', 'cl', 'ccw'])
+                current_position -= 1
+                self.nosepiece_motor.step_rotate('ccw')
                 self._settings['lens']['position']['dynamic'] = current_position
 
         self._settings['lens']['index'] = lens_index

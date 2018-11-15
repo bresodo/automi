@@ -47,25 +47,25 @@ class Stepper:
 
         self._DIR = dir
         self._STEP = step
-        self._SPR = 360 / step_angle
+        self._SPR = 360 / step_angle  # steps per rotation (200)
         self._DELAY = delay
         self._RESOLUTION = resolution
+        self._MODE_PINS = mode_pins  # Microstep Resolution GPIO Pins
         self._step_count = self._SPR
 
-        GPIO.setup(self._DIR, GPIO.OUT)
-        GPIO.setup(self._STEP, GPIO.OUT)
-        GPIO.output(self._DIR, self._CW)
+        self.setup_pins()
 
-        self._MODE_PINS = mode_pins  # Microstep Resolution GPIO Pins
-        GPIO.setup(self._MODE_PINS, GPIO.OUT)
-        GPIO.output(self._MODE_PINS, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
-        print('Resolution: '+str(self._RESOLUTION))
-        self._step_count = int(self._SPR * self._RESOLUTION)
-        self._DELAY = self._DELAY / self._RESOLUTION
-        print('SPR: ' + str(self._SPR))
-        print('Step Count: '+str(self._step_count))
+        self._step_count = int(self._SPR * self._RESOLUTION)  # calculate number of steps multiplied to resolution
+        self._DELAY = self._DELAY / self._RESOLUTION  # delay is divided by resolution to reduce the delay due to higher number of steps
 
-    def change_settings(self, type, value):
+    def setup_pins(self):
+        GPIO.setup(self._DIR, GPIO.OUT)  # Pin for direction
+        GPIO.setup(self._STEP, GPIO.OUT)  # Pin for step
+        GPIO.output(self._DIR, self._CW)  # Output direction for pin
+        GPIO.setup(self._MODE_PINS, GPIO.OUT)  # Pin for mode m0,m1,m2
+        GPIO.output(self._MODE_PINS, self._RESOLUTION_VALUE[str(self._RESOLUTION)])  # Output for mode
+
+    def change_setting(self, type, value):
         if type == 'dir':
             self._DIR = value
         elif type == 'step':
@@ -74,7 +74,6 @@ class Stepper:
             self._DELAY = value
         elif type == 'spr':
             self._SPR = 360 / value
-            GPIO.output(self._MODE, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
             self._step_count = self._SPR * self._RESOLUTION
             self._DELAY = self._DELAY / self._RESOLUTION
         elif type == 'resolution':
@@ -82,19 +81,19 @@ class Stepper:
             GPIO.output(self._MODE, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
             self._step_count = self._SPR * self._RESOLUTION
             self._DELAY = self._DELAY / self._RESOLUTION
+        elif type == 'mode':
+            self._MODE_PINS = value
 
-    def rotate(self, drc):
+    def rotate(self, drc):  # move stepper by half the max step count 6400/2 = 3200 half rotation
         self._set_direction(drc)
-
         for i in range(int(self._step_count/2)):
-            # print('Steps: ' + str(i))
-            GPIO.output(self._STEP, GPIO.HIGH)
-            sleep(0.000002)
-            GPIO.output(self._STEP, GPIO.LOW)
-            sleep(0.000002)
+            self._move()
 
     def step_rotate(self, drc):  # Move the stepper motor only by one step
         self._set_direction(drc)
+        self._move()
+
+    def _move(self):
         GPIO.output(self._STEP, GPIO.HIGH)
         sleep(0.000002)
         GPIO.output(self._STEP, GPIO.LOW)
@@ -103,10 +102,13 @@ class Stepper:
     def _set_direction(self, drc):
         if drc == 'cw':
             GPIO.output(self._DIR, self._CW)
-            # print('Going Down')
         elif drc == 'ccw':
-            # print('Going Up')
             GPIO.output(self._DIR, self._CCW)
+
+    def __str__(self):
+        return ('Settings:\nDirection:{}\nStep:{}\nDelay:{}\nSPR:{}\nResolution:{}\nMode:{}'.format(
+            self._DIR, self._STEP, self._DELAY, self._SPR, self._RESOLUTION, self._MODE_PINS
+        ))
 
 # DIR = 20   # Direction GPIO Pin
 # STEP = 21  # Step GPIO Pin
