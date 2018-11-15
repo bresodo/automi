@@ -26,6 +26,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         super(self.__class__, self).__init__()
         self.setupUi(self)
         self._settings = None
+        self._app_status = True
 
         try:
             self.ip = (([ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if
@@ -65,7 +66,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
                                     step_angle=1.8,
                                     delay=0.0208,
                                     resolution=32,
-                                    mode_pins=(14, 15, 18))
+                                    mode_pins=(14, 15, 23))
         self.nosepiece_motor = Stepper(dir=5,
                                     step=6,
                                     step_angle=1.8,
@@ -73,6 +74,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
                                     resolution=32,
                                     mode_pins=(13, 19, 26)) # M0 M1 M2
         self.leftright_servo = Servo(17)
+        self.forwardbackward_servo = Servo(18)
 
         self._init_settings()
         self._init_style()
@@ -93,7 +95,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
 
     def closeEvent(self, event):
         self._save_settings()
-        self._add_command(None, None, None)
+        self._app_status = False
         print('Exiting...')
 
     def _setup_widgets(self):
@@ -114,6 +116,7 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         self.brightness_slider_2.setSliderPosition(self._settings['brightness_slider']['position'])
 
         self.leftright_servo.set_angle(self._settings['left-right_button']['position'])
+        self.forwardbackward_servo.set_angle(self._settings['forward-backward_button']['position'])
 
     def _setup_signals(self):
         # Connect to thread signals. This functions are automatically called when a signal is emitted from the thread
@@ -135,10 +138,12 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         # Left-Right Button
         self.left_button.clicked.connect(lambda: self._add_command('button', 'lr', 'inc'))
         self.right_button.clicked.connect(lambda: self._add_command('button', 'lr', 'dec'))
-
+        # Lens Button
         self.change_lens_button.clicked.connect(self._change_lens)
+        # Zoom Button
         self.zoom_slider.valueChanged.connect(self._set_zoom)
-        self.updown_slider.valueChanged.connect(lambda: self._add_command('slider', 'updown', None))
+        # Up/Down Slider
+        self.updown_slider.valueChanged.connect(lambda: self._commands_queue.put(['slider', 'updown', None]))
 
     def _init_style(self):
         pass
@@ -184,27 +189,27 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
         while True:
             cmd = self._commands_queue.get()
             print('Command Worker: ' + str(cmd))
-            if cmd[0] is None:
+            if not self._app_status:
                 self._commands_queue.task_done()
-                break;
+                break
             self._execute_command(cmd)
             self._commands_queue.task_done()
 
     def _execute_command(self, data):
-        type = data[0]  # Button, Slider
-        command = data[1]
-        value = data[2]
-        print('Command Get')
+        (type, command, value) = data
         if type == 'button':
             if command == 'lr':
-                print('Left Right')
                 self._move_stage(command, value)
             elif command == 'fb':
-                print('Forward Backward')
                 self._move_stage(command, value)
+            elif command == 'cl':
+                self.nosepiece_motor.step_rotate(value)
         elif type == 'slider':
+            print('Working')
             if command == 'updown':
+                print('Going Up/Down')
                 self._set_updown()
+        print('Executing Command...')
 
     def _process_command(self):
         # print('Processing command...')
@@ -255,21 +260,21 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
     def _move_stage(self, direction, action):
         setting_name = {
             "lr": ['left-right_button', self.leftright_servo],
-            "fb": ['forward-backward_button', self.leftright_servo],
+            "fb": ['forward-backward_button', self.forwardbackward_servo],
         }
-        servo = self.leftright_servo
+        servo = setting_name[direction][1]
         pre_position = self._settings[setting_name[direction][0]]['position']
         post_position = pre_position
         step = self._settings[setting_name[direction][0]]['steps']
-        half_step = None
+        # half_step = None
         if action == 'inc' and post_position < 180:
             post_position += step
-            half_step = 1
+            # half_step = 1
         elif action == 'dec' and post_position > 0:
             post_position -= step
-            half_step = -1
-        for i in range(pre_position, post_position, half_step):
-            servo.set_angle(i+half_step)
+            # half_step = -1
+        # for i in range(pre_position, post_position, half_step):
+        servo.set_angle(post_position)
         self._settings[setting_name[direction][0]]['position'] = post_position
     # def _move_leftright(self, direc):
     #     position = self._settings['left-right_button']['position']
@@ -300,28 +305,34 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
     #     self._settings['forward-backward_button']['position'] = position
 
     def _change_lens(self):
-        lens_index = self._settings['lens']['current_lens']
-        current_position = self._settings['lens']['position']
+        lens_index = self._settings['lens']['index']
+        current_position = self._settings['lens']['position']['dynamic']
         if lens_index == 0:
             # Rotate Stepper To next lens
             print('Changing Lens: 0->1')
-            for pos in range(6400):
-                self.nosepiece_motor.rotate('cw')
+            lens_index = 1
+            while current_position < self._settings['lens']['position']['static'][0]:
+                self._commands_queue.put(['button', 'cl', 'cw'])
+                current_position += 1
+                self._settings['lens']['position']['dynamic'] = current_position
 
         elif lens_index == 1:
-            # Rotate Stepper
+            # Rotate Stepper clockwise going to lens 2
             print('Changing Lens: 1->2')
-            for pos in range(6400):
-                self.nosepiece_motor.rotate('cw')
+            lens_index = 2
+            while current_position < self._settings['lens']['position']['static'][1]:
+                self._commands_queue.put(['button', 'cl', 'cw'])
+                self._settings['lens']['position']['dynamic'] = current_position
 
         elif lens_index == 2:
-            # Rotate Stepper
-            print('Changing Lens: 2->3')
-            for pos in range(6400):
-                self.nosepiece_motor.rotate('cw')
+            # Rotate Stepper counter clockwise returning to lens 0
+            print('Changing Lens: 2->0')
+            lens_index = 0
+            while current_position < self._settings['lens']['position']['static'][2]:
+                self._commands_queue.put(['button', 'cl', 'ccw'])
+                self._settings['lens']['position']['dynamic'] = current_position
 
-        self._settings['lens']['position'] = current_position
-        self._settings['lens']['current_lens'] = lens_index
+        self._settings['lens']['index'] = lens_index
 
     def _set_zoom(self):
         self.camera.zoom = self.zoom_slider.value()
@@ -343,13 +354,15 @@ class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
             steps = current_position - new_position
 
         for step in range(steps):
-            if direction == "up" and current_position < self._settings['updown_slider']['max_position']:
+            if self._app_status and direction == "up" and current_position < self._settings['updown_slider']['max_position']:
                 current_position += 1
                 self.updown_motor.rotate('ccw')
+                self._settings['updown_slider']['position'] = current_position
                 print('Current Position(Up): ' + str(current_position))
-            elif direction == "down" and current_position > self._settings['updown_slider']['min_position']:
+            elif self._app_status and direction == "down" and current_position > self._settings['updown_slider']['min_position']:
                 current_position -= 1
                 self.updown_motor.rotate('cw')
+                self._settings['updown_slider']['position'] = current_position
                 print('Current Position(Down): ' + str(current_position))
             else:
                 print("Limit Reach!")

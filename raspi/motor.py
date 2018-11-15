@@ -21,7 +21,7 @@ class Servo:
         duty = angle / 18 + 2
         GPIO.output(self.pin, True)
         self.pwm.ChangeDutyCycle(duty)
-        sleep(1)
+        sleep(0.5)
         GPIO.output(self.pin, False)
         self.pwm.ChangeDutyCycle(0)
 
@@ -61,7 +61,7 @@ class Stepper:
         GPIO.output(self._MODE_PINS, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
         print('Resolution: '+str(self._RESOLUTION))
         self._step_count = int(self._SPR * self._RESOLUTION)
-        self._DELAY = .00208 / self._RESOLUTION
+        self._DELAY = self._DELAY / self._RESOLUTION
         print('SPR: ' + str(self._SPR))
         print('Step Count: '+str(self._step_count))
 
@@ -76,29 +76,37 @@ class Stepper:
             self._SPR = 360 / value
             GPIO.output(self._MODE, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
             self._step_count = self._SPR * self._RESOLUTION
-            self._DELAY = .0208 / self._RESOLUTION
+            self._DELAY = self._DELAY / self._RESOLUTION
         elif type == 'resolution':
             self._RESOLUTION = value
             GPIO.output(self._MODE, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
             self._step_count = self._SPR * self._RESOLUTION
-            self._DELAY = .00208 / self._RESOLUTION
+            self._DELAY = self._DELAY / self._RESOLUTION
 
     def rotate(self, drc):
+        self._set_direction(drc)
+
+        for i in range(int(self._step_count/2)):
+            # print('Steps: ' + str(i))
+            GPIO.output(self._STEP, GPIO.HIGH)
+            sleep(0.000002)
+            GPIO.output(self._STEP, GPIO.LOW)
+            sleep(0.000002)
+
+    def step_rotate(self, drc):  # Move the stepper motor only by one step
+        self._set_direction(drc)
+        GPIO.output(self._STEP, GPIO.HIGH)
+        sleep(0.000002)
+        GPIO.output(self._STEP, GPIO.LOW)
+        sleep(0.000002)
+
+    def _set_direction(self, drc):
         if drc == 'cw':
             GPIO.output(self._DIR, self._CW)
             # print('Going Down')
         elif drc == 'ccw':
             # print('Going Up')
             GPIO.output(self._DIR, self._CCW)
-
-        for i in range(int(self._step_count/2)):
-            # print('Steps: ' + str(i))
-            GPIO.output(self._STEP, GPIO.HIGH)
-            sleep(self._DELAY)
-            GPIO.output(self._STEP, GPIO.LOW)
-            sleep(self._DELAY)
-
-
 
 # DIR = 20   # Direction GPIO Pin
 # STEP = 21  # Step GPIO Pin
