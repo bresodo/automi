@@ -1,21 +1,65 @@
 from time import sleep
 import RPi.GPIO as GPIO
+import Adafruit_PCA9685
 
 GPIO.setmode(GPIO.BCM)
 
+# Pulse Width = 1/Freq = 1/50 = 20 ms = 0.02 seconds
+# Time per tick = 4.88x10^-6
+
+
+class AdaServo:
+    def __init__(self, channel, frequency):
+        self.channel = channel
+        self.frequency = frequency
+        self.pwm = Adafruit_PCA9685.PCA9685()
+        self.pwm.set_pwm_freq(self.frequency)
+
+    # def set_angle(self, min_tick, max_tick):
+    #     # Time per cycle = 20ms
+    #     # 2.4ms = 12%
+    #     # 81.92ticks = 0.4ms = 0 angle = 0%
+    #     # 286.73ticks = 1.4ms = 90 angle = 50%
+    #     # 491.52ticks = 2.4ms = 180 angle = 100%
+    #     # 1% = 4.92 ticks = 0.024ms = 1.8 angle
+    #     # 410 tick = 180 angle = 100%
+    #     #
+    #     self.pwm.set_pwm(self.channel, min_tick, max_tick)
+    #     sleep(1)
+    def set_angle(self, angle):
+        ticks = int(((angle / 18) * 41) + 82)
+        self.pwm.set_pwm(self.channel, 0, ticks)
+        sleep(0.5)
+        self.pwm.set_pwm(self.channel, 0, 0)
+
+    def set_pin(self, pin):
+        self.channel = pin
+
+    def set_freq(self, freq):
+        self.pwm.set_pwm_freq(freq)
+
+    def __str__(self):
+        return 'Channel: {ch}\nFrequency: {freq}'.format(ch=self.channel, freq=self.frequency)
+
 
 class Servo:
-
     def __init__(self, pin):
         self.pin = pin
         GPIO.setup(pin, GPIO.OUT)  # PWM PINS 17
 
-        self.pwm = GPIO.PWM(self.pin, 50)
-        self.pwm.start(2.5)
+        self._setup()
 
     def __del__(self):
         self.set_angle(0)
         self.pwm.stop()
+
+    def _setup(self):
+        self.pwm = GPIO.PWM(self.pin, 50)  # Frequency is 50Hz
+        self.pwm.start(2.5)
+
+    def set_pin(self, pin):
+        self.pin = pin
+        self._setup()
 
     def set_angle(self, angle):
         duty = angle / 18 + 2
@@ -35,7 +79,7 @@ class Stepper:
     # _SPR = 200   # Steps per Revolution (360 / 1.8)
     # _DELAY = .0208  # Affects the speed of the rotation
 
-    def __init__(self, dir=20, step=21, step_angle=1.8, delay=0.0208, resolution=32, mode_pins=(14, 15, 18)):
+    def __init__(self, dir=None, step=None, step_angle=1.8, delay=0.0208, resolution=None, mode_pins=None):
         self._RESOLUTION_VALUE = {
             '1': (0, 0, 0),
             '2': (1, 0, 0),
@@ -65,28 +109,45 @@ class Stepper:
         GPIO.setup(self._MODE_PINS, GPIO.OUT)  # Pin for mode m0,m1,m2
         GPIO.output(self._MODE_PINS, self._RESOLUTION_VALUE[str(self._RESOLUTION)])  # Output for mode
 
-    def change_setting(self, type, value):
-        if type == 'dir':
-            self._DIR = value
-        elif type == 'step':
-            self._STEP = value
-        elif type == 'delay':
-            self._DELAY = value
-        elif type == 'spr':
-            self._SPR = 360 / value
-            self._step_count = self._SPR * self._RESOLUTION
-            self._DELAY = self._DELAY / self._RESOLUTION
-        elif type == 'resolution':
-            self._RESOLUTION = value
-            GPIO.output(self._MODE, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
-            self._step_count = self._SPR * self._RESOLUTION
-            self._DELAY = self._DELAY / self._RESOLUTION
-        elif type == 'mode':
-            self._MODE_PINS = value
+    def change_settings(self, dir=None, step=None, step_angle=1.8, delay=0.0208, resolution=32, mode_pins=(None, None, None)):
+        settings = [self._DIR, self._STEP, self._STEP, self._DELAY, self._RESOLUTION, self._MODE_PINS]
+        values = [dir, step, step_angle, delay, resolution, mode_pins]
+        index = 0
+        while index < len(settings):
+            if not values[index] is None:
+                settings[0] = values[0]
+                print('Settings{}: Changing setting'.format(index))
+            else:
+                print('Setting{}: Changed'.format(index))
+            index += 1
+
+    # def change_setting(self, type, value):
+    #     if type == 'dir':
+    #         self._DIR = value
+    #     elif type == 'step':
+    #         self._STEP = value
+    #     elif type == 'delay':
+    #         self._DELAY = value
+    #     elif type == 'spr':
+    #         self._SPR = 360 / value
+    #         self._step_count = self._SPR * self._RESOLUTION
+    #         self._DELAY = self._DELAY / self._RESOLUTION
+    #     elif type == 'resolution':
+    #         self._RESOLUTION = value
+    #         GPIO.output(self._MODE, self._RESOLUTION_VALUE[str(self._RESOLUTION)])
+    #         self._step_count = self._SPR * self._RESOLUTION
+    #         self._DELAY = self._DELAY / self._RESOLUTION
+    #     elif type == 'mode':
+    #         self._MODE_PINS = value
 
     def rotate(self, drc):  # move stepper by half the max step count 6400/2 = 3200 half rotation
         self._set_direction(drc)
-        for i in range(int(self._step_count/2)):
+        for i in range(int(self._step_count)/4):
+            self._move()
+
+    def steps_rotate(self, drc, steps):
+        self._set_direction(drc)
+        for i in range(steps):
             self._move()
 
     def step_rotate(self, drc):  # Move the stepper motor only by one step
@@ -95,9 +156,9 @@ class Stepper:
 
     def _move(self):
         GPIO.output(self._STEP, GPIO.HIGH)
-        sleep(0.000002)
+        sleep(self._DELAY)
         GPIO.output(self._STEP, GPIO.LOW)
-        sleep(0.000002)
+        sleep(self._DELAY)
 
     def _set_direction(self, drc):
         if drc == 'cw':

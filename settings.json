@@ -1,1 +1,76 @@
-{"zoom_slider": {"position": 2, "max_position": 199, "min_position": 0}, "brightness_slider": {"position": 0, "max_position": 199, "min_position": 0}, "updown_slider": {"position": 0, "max_position": 50, "min_position": 0, "pins": {"dir": 20, "step": 21, "step_angle": 1.8, "delay": 0.0208, "resolution": 32, "mode_pins": [14, 15, 23]}}, "lens": {"position": {"dynamic": 0, "static": [2166, 4266, 6400]}, "index": 0, "pins": {"dir": 5, "step": 6, "step_angle": 1.8, "delay": 0.0208, "resolution": 32, "mode_pins": [13, 19, 26]}}, "forward-backward_button": {"position": 0, "steps": 5, "pin": 18}, "left-right_button": {"position": 0, "steps": 5, "pin": 17}, "video_port": 9766, "directories": {"images": "files/images", "videos": "files/videos", "icons": "icons/"}}
+{
+    "brightness_servo": {
+        "max_position": 80,
+        "min_position": 0,
+        "pin": 1,
+        "position": 22,
+        "ticks": 1
+    },
+    "camera": {
+        "blur": {
+            "threshold": 100
+        },
+        "index": 0
+    },
+    "directories": {
+        "icons": "icons/",
+        "images": "images/",
+        "videos": "videos/"
+    },
+    "forward-backward_servo": {
+        "pin": 2,
+        "position": 0,
+        "steps": 10
+    },
+    "left-right_servo": {
+        "pin": 0,
+        "position": 0,
+        "steps": 10
+    },
+    "lens_motor": {
+        "index": 0,
+        "pins": {
+            "delay": 0.0208,
+            "dir": 12,
+            "mode_pins": [
+                25,
+                7,
+                5
+            ],
+            "resolution": 32,
+            "step": 6,
+            "step_angle": 1.8
+        },
+        "position": {
+            "dynamic": 110,
+            "static": [
+                0,
+                2133,
+                4267
+            ]
+        }
+    },
+    "updown_motor": {
+        "max_position": 200,
+        "min_position": 0,
+        "pins": {
+            "delay": 2.08e-05,
+            "dir": 21,
+            "mode_pins": [
+                13,
+                16,
+                19
+            ],
+            "resolution": 32,
+            "step": 20,
+            "step_angle": 1.8
+        },
+        "position": 50
+    },
+    "video_port": 9766,
+    "zoom_slider": {
+        "max_position": 180,
+        "min_position": 0,
+        "position": 0
+    }
+}

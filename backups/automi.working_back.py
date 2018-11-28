@@ -9,10 +9,10 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 
-import automi_ui
+import automi_ui1
 
 
-class Window(QtWidgets.QMainWindow, automi_ui.Ui_MainWindow):
+class Window(QtWidgets.QMainWindow, automi_ui1.Ui_MainWindow):
     def __init__(self):
         super(self.__class__, self).__init__()
         self.setupUi(self)

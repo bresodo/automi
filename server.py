@@ -1,4 +1,5 @@
 import base64
+import re
 
 import cv2
 import logging
@@ -9,13 +10,14 @@ import threading
 
 class VideoServer:
     def __init__(self, ip, port):
-        self._clients = {}
+        self._clients = {object: {'conn': object, 'addr': None, 'name': 'Hello'}}
+        self._max_clients = 20
         self.latest_connection = None
         self._is_listening = False
 
         self.logger = logging.getLogger(str(VideoServer))
         self.logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler("video_server.log")
+        handler = logging.FileHandler("logs/video_server.log")
         handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s:line-%(lineno)d->%(message)s'))
         self.logger.addHandler(handler)
 
@@ -24,13 +26,13 @@ class VideoServer:
 
     def start(self):
         self.logger.debug("Starting Video Server.")
-        counter = 3
+        counter = 20
         while not self._is_listening and counter > 0:
             if not self._is_listening:
                 try:
                     self.logger.debug("Binding address {}:{}".format(self.address[0], self.address[1]))
                     self._socket.bind(self._address)
-                    self._socket.listen(10)
+                    self._socket.listen(self._max_clients)
                     self._is_listening = True
                     self.logger.debug('Server is now listening')
                 except socket.error:
@@ -52,6 +54,14 @@ class VideoServer:
             self.logger.debug("Server socket closed.")
         else:
             self.logger.debug("Unable to close server -> Server is already closed.")
+            self._is_listening = True
+
+    def reset(self, address):
+        print('Resetting')
+        self.stop()
+        self._address = address
+        self.start()
+        print('Resetted')
 
     def accept_connection(self):
         self.logger.debug("Waiting for connection at {}:{}".format(self.address[0], self.address[1]))
@@ -59,6 +69,7 @@ class VideoServer:
         self.logger.debug("Connection accepted at {}:{}".format(self.address[0], self.address[1]))
         self.logger.debug("Receiving client name.")
         name = conn.recv(32).decode('utf-8')  # Get name of client
+        name = re.sub(r'alive$', '', name)
         for client in self._clients:
             if self._clients[client]['name'] == name:
                 self.logger.debug("accept_connection: Client already exists.")
@@ -168,3 +179,6 @@ class CommunicationServer:
     @property
     def address(self):
         return self._address
+
+
+
