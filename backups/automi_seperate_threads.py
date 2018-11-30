@@ -52,7 +52,7 @@ def convert(item):
                 print('Unable to convert. Invalid input')
 
 
-if check_dependency('RPi') is not None:
+if check_dependency('GPIO') is not None:
     from motor import AdaServo, Stepper
 else:
     print('Import Error: Unable to import AdaServo, Stepper')
@@ -159,8 +159,21 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
 
         self.servomotor_thread = ServoMotorThread()
         self.servomotor_thread.start()
+
+        self.servo_thread = ServoThread()
+        # self.servo_thread.start()
+        self.lens_thread = LensThread()
+        # self.lens_thread.start()
         self.autofocus_thread = AutofocusThread()
         # self.autofocus_thread.start()
+
+        # Background thread for updown movement of the actuator
+        self.updown_worker = UpdownWorker()
+        self.updown_background_thread = QtCore.QThread(self)
+        self.updown_worker.moveToThread(self.updown_background_thread)
+        self.updown_background_thread.started.connect(self.updown_worker.process_command)
+        self.updown_background_thread.start()
+
         try:
             self._ip = (([ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if
                           not ip.startswith("127.")] or [
@@ -178,7 +191,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             else:
                 print('Dir Already exists ' + dir)
 
-        if check_dependency('RPi') is not None:
+        if check_dependency('GPIO') is not None:
             self.updown_motor = Stepper(
                 dir=self._settings['updown_motor']['pins']['dir'],
                 step=self._settings['updown_motor']['pins']['step'],
@@ -262,7 +275,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
 
         # Setup previous position
         self._set_zoom()
-        if check_dependency('RPi') is not None:
+        if check_dependency('GPIO') is not None:
             self.brightness_servo.set_angle(self._settings['brightness_servo']['position'])
             self.leftright_servo.set_angle(self._settings['left-right_servo']['position'])
             self.forwardbackward_servo.set_angle(self._settings['forward-backward_servo']['position'])
@@ -325,7 +338,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             lambda: self.servomotor_thread.start_lrfb({
                 'widget': 'button',
                 'command': 'left',
-                'servo': self.leftright_servo,
+                'servo': self.forward_button,
                 'current_position': self._settings['left-right_servo']['position'],
                 'step': self._settings['left-right_servo']['steps']
             })
@@ -334,7 +347,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             lambda: self.servomotor_thread.start_lrfb({
                 'widget': 'button',
                 'command': 'right',
-                'servo': self.leftright_servo,
+                'servo': self.forward_button,
                 'current_position': self._settings['left-right_servo']['position'],
                 'step': self._settings['left-right_servo']['steps']
             })
@@ -343,7 +356,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             lambda: self.servomotor_thread.start_lrfb({
                 'widget': 'button',
                 'command': 'forward',
-                'servo': self.forwardbackward_servo,
+                'servo': self.forward_button,
                 'current_position': self._settings['forward-backward_servo']['position'],
                 'step': self._settings['forward-backward_servo']['steps']
             })
@@ -352,7 +365,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             lambda: self.servomotor_thread.start_lrfb({
                 'widget': 'button',
                 'command': 'backward',
-                'servo': self.forwardbackward_servo,
+                'servo': self.forward_button,
                 'current_position': self._settings['forward-backward_servo']['position'],
                 'step': self._settings['forward-backward_servo']['steps']
             })
@@ -429,7 +442,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
 
         index = 0
         for setting, items in settings_list.items():
-            # print(f'{setting}: {items}')
+            print(f'{setting}: {items}')
             for item, type in items.items():
                 results = item.split('.')
                 len_results = len(results)
@@ -805,7 +818,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
 
     def _update_frame(self):
         frame = self.camera_thread.image_raw
-        # self._focus = cv2.Laplacian(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
+        self._focus = cv2.Laplacian(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_size = 0.8
         thickness = 1
@@ -846,13 +859,13 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         print('Auto focusing')
         while self._focus < threshold:
 
-            # print(f'Focus Difference: {focus_diff}')
+            print(f'Focus Difference: {focus_diff}')
             if focus_diff >= 5:
                 pass
             # Go down first then up until image is not blurred
             # if not topped and self._app_status and current_position < max_position and not current_position == max_position:  # Direction: Up
             #     current_position += 1
-            #     if check_dependency('RPi') is not None:
+            #     if check_dependency('GPIO') is not None:
             #         self.updown_motor.rotate('ccw')
             #     sleep(0.5)
             #     self._settings['updown_motor']['position'] = current_position
@@ -860,7 +873,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             #         topped = True
             # elif not bottomed and self._app_status and current_position > min_position and not current_position == min_position:  # Direction: Down
             #     current_position -= 1
-            #     if check_dependency('RPi') is not None:
+            #     if check_dependency('GPIO') is not None:
             #         self.updown_motor.rotate('cw')
             #     sleep(0.5)
             #     self._settings['updown_motor']['position'] = current_position
@@ -889,13 +902,12 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self.change_lens_button.setIcon(QIcon(QPixmap(self._BASE_DIR + '{icons_dir}/icon_lens_on.png'
                                                       .format(icons_dir=self._settings['directories']['icons'])
                                                       )))
-        self.disable_control_widgets(('left', 'right', 'forward', 'backward', 'brightness', 'updown'))
 
     @pyqtSlot(int, int)
     def ongoing_lens(self, index, position):
         self._settings['lens_motor']['index'] = index
         self._settings['lens_motor']['position']['dynamic'] = position
-        # print(f'Lens -> Current Position: {position} at Lens: {index}')
+        print(f'Lens -> Current Position: {position} at Lens: {index}')
 
     @pyqtSlot(int, int)
     def finished_lens(self, index, position):
@@ -915,9 +927,8 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self.change_lens_button.setIcon(QIcon(QPixmap(self._BASE_DIR + '{icons_dir}/icon_lens_off.png'
                                                       .format(icons_dir=self._settings['directories']['icons'])
                                                       )))
-        self.disable_control_widgets(('left', 'right', 'forward', 'backward', 'brightness', 'updown'), False)
-        # print(f'Saving Current Position: {position}')
-        # print(f'Lens -> Lens Index: {index}')
+        print(f'Saving Current Position: {position}')
+        print(f'Lens -> Lens Index: {index}')
 
     @pyqtSlot()
     def started_updown(self):
@@ -925,21 +936,16 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self.updown_slider.setStyleSheet('background: rgb(204, 0, 14);')
         self.updown_slider.sliderReleased.disconnect()
         self.updown_slider.sliderPressed.connect(lambda: self.servomotor_thread.stop_updown())
-        self.left_button.setDisabled(True)
-        self.right_button.setDisabled(True)
-        self.forward_button.setDisabled(True)
-        self.backward_button.setDisabled(True)
-        self.disable_control_widgets(('left', 'right', 'forward', 'backward', 'brightness', 'lens'))
 
     @pyqtSlot(int)
     def ongoing_updown(self, position):
-        # print(f'Updown -> Current Position: {position}')
+        print(f'Updown -> Current Position: {position}')
         self._settings['updown_motor']['position'] = position
 
     @pyqtSlot(int)
     def finished_updown(self, position):
         self._settings['updown_motor']['position'] = position
-        # print(f'Saving last position(updown): {position}')
+        print(f'Saving last position(updown): {position}')
         self.updown_slider.sliderPressed.connect(lambda: self.servomotor_thread.stop_updown())
         self.updown_slider.sliderPressed.disconnect()
         self.updown_slider.sliderReleased.connect(
@@ -953,7 +959,6 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         )
         self.updown_slider.setStyleSheet('background: #565e7c;')
         self.updown_slider.setValue(position)
-        self.disable_control_widgets(('left', 'right', 'forward', 'backward', 'brightness', 'lens'), False)
 
     @pyqtSlot()
     def started_autofocus(self):
@@ -963,7 +968,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
 
     @pyqtSlot(int)
     def ongoing_autofocus(self, position):
-        # print(f'Updown -> Current Position: {position}')
+        print(f'Updown -> Current Position: {position}')
         self._settings['updown_motor']['position'] = position
         self.autofocus_thread.update_focus(self._focus)
         self.updown_slider.setDisabled(True)
@@ -972,7 +977,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
     def finished_autofocus(self, position):
         self._settings['updown_motor']['position'] = position
         self.updown_slider.setDisabled(False)
-        # print(f'Saving last position(updown): {position}')
+        print(f'Saving last position(updown): {position}')
 
     @pyqtSlot(object)
     def change_settings(self, settings):
@@ -980,18 +985,6 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self._save_settings()
         self._init_settings()
 
-    def disable_control_widgets(self, to_disable, disabled=True):
-        widgets = {
-            'left': self.left_button,
-            'right': self.right_button,
-            'forward': self.forward_button,
-            'backward': self.backward_button,
-            'brightness': self.brightness_slider,
-            'lens': self.change_lens_button,
-            'updown': self.updown_slider
-        }
-        for widget in to_disable:
-            widgets[widget].setDisabled(disabled)
 
 class AutofocusThread(QThread):
     started = pyqtSignal()
@@ -1048,8 +1041,8 @@ class AutofocusThread(QThread):
                 sleep(0.01)
                 self.ongoing.emit(self.current_position)
                 self.focus_diff = self.focus_prev - self.focus
-                # print(f'Current Focus: {self.focus} - Previous Focus: {self.focus_prev}')
-                # print(f'Focus Difference: {self.focus_diff}')
+                print(f'Current Focus: {self.focus} - Previous Focus: {self.focus_prev}')
+                print(f'Focus Difference: {self.focus_diff}')
                 if self.focus_diff > 10:
                     self.direction = 'up'
                 elif self.focus_diff < -10:
@@ -1059,7 +1052,7 @@ class AutofocusThread(QThread):
                 if not self.topped and self.moving and self.current_position < self.max_position:  # Direction: Up
                     self.current_position += 10
 
-                    if check_dependency('RPi') is not None:
+                    if check_dependency('GPIO') is not None:
                         self.updown_motor.steps_rotate('ccw', 10)
                         self.ongoing.emit(self.current_position)
                     else:
@@ -1072,7 +1065,7 @@ class AutofocusThread(QThread):
                 elif not self.bottomed and self.moving and self.current_position > self.min_position:  # Direction: Down
                     self.current_position -= 10
 
-                    if check_dependency('RPi') is not None:
+                    if check_dependency('GPIO') is not None:
                         self.updown_motor.steps_rotate('cw', 10)
                         self.ongoing.emit(self.current_position)
                     else:
@@ -1082,6 +1075,153 @@ class AutofocusThread(QThread):
 
                     if self.current_position <= self.min_position:
                         self.bottomed = True
+
+
+class LensThread(QThread):
+    started = pyqtSignal()
+    ongoing = pyqtSignal(int, int)
+    finished = pyqtSignal(int, int)
+
+    def __init__(self):
+        QtCore.QThread.__init__(self)
+        self.commands_queue = queue.Queue(1)
+        self.moving_lens = True
+        self.running = True
+
+    def __del__(self):
+        self.wait()
+        print("Closing Lens Thread.")
+
+    def add_command(self, cmd):
+        self.commands_queue.put(cmd)
+        self.moving_lens = True
+
+    def stop_command(self):
+        self.moving_lens = False
+
+    def run(self):
+        while self.running:
+            (motor, lens_index, current_position, p1, p2, p3) = self.commands_queue.get()
+            self.started.emit()
+
+            if lens_index == 0:
+                # Rotate Stepper To next lens
+                print('Changing Lens: 0->1')
+                while self.moving_lens and current_position < p2:  # 2000
+                    current_position += 1
+                    if check_dependency('GPIO') is not None:
+                        self.lens_motor.step_rotate('cw')
+                    else:
+                        sleep(0.5)
+                    self.ongoing.emit(lens_index, current_position)
+
+                if self.moving_lens:
+                    lens_index = 1
+                    self.moving_lens = False
+                    print('Cycle complete')
+                else:
+                    print('Cycle incomplete.')
+                    print(f'Current Position: {current_position} - Expected Position: {p2}')
+
+            elif lens_index == 1:
+                # Rotate Stepper clockwise going to lens 2
+                print('Changing Lens: 1->2')
+                while self.moving_lens and current_position < p3:  # 4000
+                    current_position += 1
+                    if check_dependency('GPIO') is not None:
+                        self.lens_motor.step_rotate('cw')
+                    else:
+                        sleep(0.5)
+                    self.ongoing.emit(lens_index, current_position)
+
+                if self.moving_lens:
+                    lens_index = 2
+                    self.moving_lens = False
+                    print('Cycle complete')
+                else:
+                    print('Cycle incomplete.')
+                    print(f'Current Position: {current_position} - Expected Position: {p3}')
+
+            elif lens_index == 2:
+                # Rotate Stepper counter clockwise returning to lens 3
+                print('Changing Lens: 2->0')
+                while self.moving_lens and current_position > p1:  # 0
+                    current_position -= 1
+                    if check_dependency('GPIO') is not None:
+                        self.lens_motor.step_rotate('ccw')
+                    else:
+                        sleep(0.5)
+                    self.ongoing.emit(lens_index, current_position)
+
+                if self.moving_lens:
+                    lens_index = 0
+                    self.moving_lens = False
+                    print('Cycle complete')
+                else:
+                    print('Cycle incomplete.')
+                    print(f'Current Position: {current_position} - Expected Position: {p1}')
+            self.finished.emit(lens_index, current_position)
+
+
+class UpdownWorker(QThread):
+    started = QtCore.pyqtSignal()
+    ongoing = QtCore.pyqtSignal(int)
+    finished = QtCore.pyqtSignal(int)
+
+    moving = False
+    commands_queue = queue.Queue(1)
+
+    def add_command(self, cmd):
+        self.commands_queue.put(cmd)
+        self.moving = True
+
+    def stop_command(self):
+        self.moving = False
+        print(f'self.moving = {self.moving}')
+
+    @QtCore.pyqtSlot()
+    def process_command(self):
+        steps = None
+        direction = None
+
+        while True:
+            (motor, new_position, current_position, max_position, min_position) = self.commands_queue.get()
+            self.started.emit()
+            print(f'UpdownWorker -> process_command: Setting New Position: {new_position}')
+            if new_position >= current_position:
+                direction = "up"
+                steps = new_position - current_position
+            elif new_position <= current_position:
+                direction = "down"
+                steps = current_position - new_position
+
+            for step in range(steps):
+                if self.moving and direction == "up" and current_position < \
+                        max_position:
+                    current_position += 1
+                    if check_dependency('GPIO') is not None:
+                        motor.rotate('ccw')
+                    else:
+                        sleep(1)
+                    self.ongoing.emit(current_position)
+                elif self.moving and direction == "down" and current_position > \
+                        min_position:
+                    current_position -= 1
+                    if check_dependency('GPIO') is not None:
+                        motor.rotate('cw')
+                    else:
+                        sleep(1)
+                    self.ongoing.emit(current_position)
+                else:
+                    if current_position == max_position:
+                        print("UpdownWoker -> process_command: Upper Limit Reached.")
+                    elif current_position ==  min_position:
+                        print("UpdownWoker -> process_command: Lower Limit Reached.")
+                    else:
+                        print("UpdownWoker -> process_command: Process Canceled.")
+                    self.finished.emit(current_position)
+                    break
+            self.finished.emit(current_position)
 
 
 class ServoMotorThread(QThread):
@@ -1102,7 +1242,6 @@ class ServoMotorThread(QThread):
         self.running_updown = False
         self.running_lens = False
         self.running_lrfb = False
-        self.ongoing_process = False
 
         self.updown_motor = {
             'motor': object, 'new_position': 0, 'current_position': 0,
@@ -1153,7 +1292,7 @@ class ServoMotorThread(QThread):
             print('Waiting for command...')
             if self.running_updown:
                 self.started_updown.emit()
-                # print(f'UpdownWorker -> process_command: Setting New Position: {self.updown_motor["new_position"]}')
+                print(f'UpdownWorker -> process_command: Setting New Position: {self.updown_motor["new_position"]}')
                 if self.updown_motor['new_position'] >= self.updown_motor['current_position']:
                     direction = "up"
                     steps = self.updown_motor['new_position'] - self.updown_motor['current_position']
@@ -1165,7 +1304,7 @@ class ServoMotorThread(QThread):
                     if self.running_updown and direction == "up" and self.updown_motor['current_position'] < \
                             self.updown_motor['max_position']:
                         self.updown_motor['current_position'] += 1
-                        if check_dependency('RPi') is not None:
+                        if check_dependency('GPIO') is not None:
                             self.updown_motor['motor'].rotate('ccw')
                         else:
                             sleep(1)
@@ -1173,7 +1312,7 @@ class ServoMotorThread(QThread):
                     elif self.running_updown and direction == "down" and self.updown_motor['current_position'] > \
                             self.updown_motor['min_position']:
                         self.updown_motor['current_position'] -= 1
-                        if check_dependency('RPi') is not None:
+                        if check_dependency('GPIO') is not None:
                             self.updown_motor['motor'].rotate('cw')
                         else:
                             sleep(1)
@@ -1203,7 +1342,7 @@ class ServoMotorThread(QThread):
                     print('Changing Lens: 0->1')
                     while self.running_lens and current_position < p2:  # 2000
                         current_position += 1
-                        if check_dependency('RPi') is not None:
+                        if check_dependency('GPIO') is not None:
                             motor.step_rotate('cw')
                         else:
                             sleep(0.5)
@@ -1215,14 +1354,14 @@ class ServoMotorThread(QThread):
                         print('Cycle complete')
                     else:
                         print('Cycle incomplete.')
-                        # print(f'Current Position: {current_position} - Expected Position: {p2}')
+                        print(f'Current Position: {current_position} - Expected Position: {p2}')
 
                 elif lens_index == 1:
                     # Rotate Stepper clockwise going to lens 2
                     print('Changing Lens: 1->2')
                     while self.running_lens and current_position < p3:  # 4000
                         current_position += 1
-                        if check_dependency('RPi') is not None:
+                        if check_dependency('GPIO') is not None:
                             motor.step_rotate('cw')
                         else:
                             sleep(0.5)
@@ -1234,14 +1373,14 @@ class ServoMotorThread(QThread):
                         print('Cycle complete')
                     else:
                         print('Cycle incomplete.')
-                        # print(f'Current Position: {current_position} - Expected Position: {p3}')
+                        print(f'Current Position: {current_position} - Expected Position: {p3}')
 
                 elif lens_index == 2:
                     # Rotate Stepper counter clockwise returning to lens 3
                     print('Changing Lens: 2->0')
                     while self.running_lens and current_position > p1:  # 0
                         current_position -= 1
-                        if check_dependency('RPi') is not None:
+                        if check_dependency('GPIO') is not None:
                             motor.step_rotate('ccw')
                         else:
                             sleep(0.5)
@@ -1253,7 +1392,7 @@ class ServoMotorThread(QThread):
                         print('Cycle complete')
                     else:
                         print('Cycle incomplete.')
-                        # print(f'Current Position: {current_position} - Expected Position: {p1}')
+                        print(f'Current Position: {current_position} - Expected Position: {p1}')
                 self.finished_lens.emit(lens_index, current_position)
             elif self.running_lrfb:
                 widget = self.lrfb_servo['widget']
@@ -1261,58 +1400,94 @@ class ServoMotorThread(QThread):
                 current_position = self.lrfb_servo['current_position']
                 servo = self.lrfb_servo['servo']
                 step = self.lrfb_servo['step']
-                print(servo)
+
                 if widget == 'button':
                     if command == 'left':
                         current_position += step
-                        if check_dependency('RPi') is not None:
-                            if 180 >= current_position >= 0:
-                                servo.set_angle(current_position)
-                                self.move_leftright.emit(current_position)
-                                print('Going left')
-                        else:
-                            if 180 >= current_position >= 0:
-                                self.move_leftright.emit(current_position)
+                        if check_dependency('GPIO') is not None:
+                            servo.set_angle(current_position)
+                        self.move_leftright.emit(current_position)
                     elif command == 'right':
                         current_position -= step
-                        if check_dependency('RPi') is not None:
-                            if 180 >= current_position >= 0:
-                                servo.set_angle(current_position)
-                                self.move_leftright.emit(current_position)
-                        else:
-                            if 180 >= current_position >= 0:
-                                self.move_leftright.emit(current_position)
+                        if check_dependency('GPIO') is not None:
+                            servo.set_angle(current_position)
+                        self.move_leftright.emit(current_position)
                     elif command == 'forward':
                         current_position += step
-                        if check_dependency('RPi') is not None:
-                            if 180 >= current_position >= 0:
-                                servo.set_angle(current_position)
-                        else:
-                            if 180 >= current_position >= 0:
-                                self.move_forwardbackward.emit(current_position)
+                        if check_dependency('GPIO') is not None:
+                            servo.set_angle(current_position)
+                        self.move_forwardbackward.emit(current_position)
                     elif command == 'backward':
                         current_position -= step
-                        if check_dependency('RPi') is not None:
-                            if 180 >= current_position >= 0:
-                                servo.set_angle(current_position)
-                        else:
-                            if 180 >= current_position >= 0:
-                                self.move_forwardbackward.emit(current_position)
+                        if check_dependency('GPIO') is not None:
+                            servo.set_angle(current_position)
+                        self.move_forwardbackward.emit(current_position)
                     else:
                         print('Command not supported!')
                 elif widget == 'slider':
                     if command == 'brightness':
-                        if check_dependency('RPi') is not None:
-                            if 80 >= current_position >= 0:
-                                servo.set_angle(current_position)
-                                self.move_brightness.emit(current_position)
-                        else:
-                            if 80 >= current_position >= 0:
-                                self.move_brightness.emit(current_position)
+                        if check_dependency('GPIO') is not None:
+                            servo.set_angle(current_position)
+                        self.move_brightness.emit(current_position)
                     else:
                         print('Command not supported!')
                 else:
                     print('Widget not supported!')
+
+
+class ServoThread(QtCore.QThread):
+    move_leftright = pyqtSignal(int)
+    move_forwardbackward = pyqtSignal(int)
+    move_brightness = pyqtSignal(int)
+
+    def __init__(self):
+        QtCore.QThread.__init__(self)
+        self.commands_queue = queue.Queue(1)
+        self.processing = True
+
+    def __del__(self):
+        self.wait()
+        print("Closing Servo Thread.")
+
+    def add_command(self, cmd):
+        self.commands_queue.put(cmd)
+
+    def run(self):
+        while self.processing:
+            # Widgets [button, slider]
+            (widget, command, servo, current_position, step) = self.commands_queue.get()
+            if widget == 'button':
+                if command == 'left':
+                    current_position += step
+                    if check_dependency('GPIO') is not None:
+                        servo.set_angle(current_position)
+                    self.move_leftright.emit(current_position)
+                elif command == 'right':
+                    current_position -= step
+                    if check_dependency('GPIO') is not None:
+                        servo.set_angle(current_position)
+                    self.move_leftright.emit(current_position)
+                elif command == 'forward':
+                    current_position += step
+                    if check_dependency('GPIO') is not None:
+                        servo.set_angle(current_position)
+                    self.move_forwardbackward.emit(current_position)
+                elif command == 'backward':
+                    current_position -= step
+                    if check_dependency('GPIO') is not None:
+                        servo.set_angle(current_position)
+                    self.move_forwardbackward.emit(current_position)
+                else:
+                    print('Command not supported!')
+            elif widget == 'slider':
+                if command == 'brightness':
+                    if check_dependency('GPIO') is not None:
+                        servo.set_angle(current_position)
+                    self.move_brightness.emit(current_position)
+                else:
+                    print('Command not supported!')
+            else:
+                print('Widget not supported!')
 
 
 class VideoServerThread(QtCore.QThread):
@@ -1435,15 +1610,6 @@ class CameraThread(QtCore.QThread):
             # Get frame from camera
             retval, frame = self._camera.read_frame()
             if retval:
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                font_size = 0.8
-                thickness = 1
-                color = (255, 255, 255)
-                self._focus = cv2.Laplacian(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
-                location = (4, 70)
-                text = "Blurred: {}".format(self._focus) if (
-                            self._focus < 100) else "Not Blurred: {}".format(self._focus)
-                cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
                 self._raw_frame = frame
                 self.ready_frame.emit()  # Emit signal indicating frame is ready
             else:
@@ -1575,7 +1741,7 @@ class PreferencesDialog(QDialog, preferences_ui.Ui_Dialog):
         print(self._settings)
 
     def save_settings(self):
-        print('Changing Settings....')
+        print('Changing Settings...')
         settings_list = {
             'camera': {'index': 'int', 'blur.threshold': 'int',
                        'names.image': 'str', 'names.video': 'str'
@@ -1607,7 +1773,7 @@ class PreferencesDialog(QDialog, preferences_ui.Ui_Dialog):
 
         index = 0
         for setting, items in settings_list.items():
-            # print(f'{setting}: {items}')
+            print(f'{setting}: {items}')
             for item, type in items.items():
                 results = item.split('.')
                 len_results = len(results)

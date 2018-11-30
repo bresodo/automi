@@ -3,7 +3,7 @@
         "max_position": 80,
         "min_position": 0,
         "pin": 1,
-        "position": 22,
+        "position": 80,
         "ticks": 1
     },
     "camera": {
@@ -23,12 +23,12 @@
     },
     "forward-backward_servo": {
         "pin": 2,
-        "position": 0,
+        "position": 160,
         "steps": 10
     },
     "left-right_servo": {
         "pin": 0,
-        "position": 0,
+        "position": 140,
         "steps": 10
     },
     "lens_motor": {
@@ -46,7 +46,7 @@
             "step_angle": 1.8
         },
         "position": {
-            "dynamic": 110,
+            "dynamic": 140,
             "static": [
                 0,
                 2133,
@@ -72,7 +72,7 @@
             "step": 20,
             "step_angle": 1.8
         },
-        "position": 56
+        "position": 40
     },
     "zoom_slider": {
         "max_position": 180,
