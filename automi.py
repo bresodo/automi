@@ -18,7 +18,7 @@ import sys
 
 from PyQt5 import QtGui
 from PyQt5 import QtCore
-from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import QMainWindow, QApplication, QSizePolicy, QDialog
 
@@ -29,6 +29,27 @@ import preferences_ui
 
 def check_dependency(dependency):
     return importlib.find_loader(dependency)
+
+
+def convert(item):
+    try:
+        print('item -> int')
+        item = int(item)
+        return item
+    except ValueError:
+        print('Unable to convert. Invalid input')
+        try:
+            print('item -> float')
+            item = float(item)
+            return item
+        except ValueError:
+            print('Unable to convert. Invalid input')
+            try:
+                print('item -> str')
+                item = str(item)
+                return item
+            except ValueError:
+                print('Unable to convert. Invalid input')
 
 
 if check_dependency('GPIO') is not None:
@@ -56,6 +77,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         super(self.__class__, self).__init__()
         self.setupUi(self)
         self._settings = {}
+        self._application_settings = QSettings()
         self._app_status = True
 
         self._ip = None
@@ -104,11 +126,17 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
     def _init_settings(self):
         with open(self._BASE_DIR + "settings.json", "r") as read:
             self._settings = json.load(read)
+        self._application_settings.setValue('automi_settings', self._settings)
+
+        print(self._application_settings.value('automi_settings'))
 
         self._VIDEOS_DIR = self._settings['directories']['videos']
         self._IMAGES_DIR = self._settings['directories']['images']
 
-        self._video_port = self._settings['video_port']
+        self._VIDEO_NAME = self._settings['camera']['names']['video']
+        self._IMAGE_NAME = self._settings['camera']['names']['image']
+
+        self._video_port = self._settings['server']['video_port']
         self._comm_port = self._video_port + 10
 
     def _save_settings(self):
@@ -130,9 +158,11 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self.video_server_thread.start()
 
         self.servo_thread = ServoThread()
-        self.servo_thread.start()
+        # self.servo_thread.start()
         self.lens_thread = LensThread()
-        self.lens_thread.start()
+        # self.lens_thread.start()
+        self.autofocus_thread = AutofocusThread()
+        # self.autofocus_thread.start()
 
         # Background thread for updown movement of the actuator
         self.updown_worker = UpdownWorker()
@@ -187,7 +217,6 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
     def _setup_widgets(self):
         self.frame_label.setScaledContents(True)
         self.frame_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-
         # Set Widget Icons
         self.change_lens_button.setIcon(QIcon(QPixmap(self._BASE_DIR + '{icons_dir}/icon_lens_off.png'
                                                       .format(icons_dir=self._settings['directories']['icons'])
@@ -263,21 +292,29 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self.lens_thread.ongoing.connect(self.ongoing_lens)
         self.lens_thread.finished.connect(self.finished_lens)
 
+        self.autofocus_thread.started.connect(self.started_autofocus)
+        self.autofocus_thread.ongoing.connect(self.ongoing_autofocus)
+        self.autofocus_thread.finished.connect(self.finished_autofocus)
+
         self.updown_worker.started.connect(self.started_updown)
         self.updown_worker.ongoing.connect(self.ongoing_updown)
         self.updown_worker.finished.connect(self.finished_updown)
 
-    def _preference_menu(self):
-        widget = QDialog(self)
-        preferences = PreferencesDialog()
-        preferences.setupUi(widget)
-        widget.exec_()
-        preferences._settings = self._settings
-        # preferences.pushButton.clicked.connect(lambda: print('Clicked.'))
 
     def _setup_widget_signals(self):
         # Connect Menu Actions
-        self.action_preferences.triggered.connect(lambda: self._preference_menu())
+        self.action_preferences.triggered.connect(lambda: self._menu_preference())
+        # (self.current_position, self.focus, self.threshold, self.max_position, self.min_position)
+        self.action_autofocus.triggered.connect(
+            lambda: self.autofocus_thread.add_command((
+                self._settings['updown_motor']['position'],
+                self._focus,
+                self._settings['camera']['blur']['threshold'],
+                self._settings['updown_motor']['max_position'],
+                self._settings['updown_motor']['min_position']
+
+            ))
+        )
 
         # Connect control signals
         self.camera_icon.clicked.connect(self._capture_image)
@@ -364,6 +401,62 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
                 0
             ))
         )
+
+    def _menu_preference(self):
+        widget = QDialog(self)
+        preferences = PreferencesDialog(self)
+        preferences.setupUi(widget)
+        # Change/Add Widget here update from windows
+        settings_list = {
+            'camera': {'index': 'int', 'blur.threshold': 'int',
+                       'names.image': 'string', 'names.video': 'string'
+            },
+            # 'brightness_servo': {'max_position':'int', 'min_position':'int',
+            #                      'pin':'int', 'position':'int', 'ticks':'int',
+            # },
+            # 'directories': {'icons': 'str', 'images': 'str', 'videos': 'str', },
+            # 'forward-backward_servo': {'pin': 'int', 'position': 'int', 'steps': 'int', },
+            # 'left-right_servo': {'pin': 'int', 'position': 'int', 'steps': 'int', },
+            # 'lens_motor': {'index': 'int', 'pins.delay': 'float', 'pins.dir': 'int',
+            #                'pins.mode_pins.0': 'int', 'pins.mode_pins.1': 'int', 'pins.mode_pins.2': 'int',
+            #                'resolution': 'int', 'step': 'int', 'step_angle': 'int',
+            #                'position.dynamic': 'int', 'position.static.0': 'int', 'position.static.1': 'int',
+            #                'position.static.2': 'int',
+            # },
+            # 'updown_motor': {'max_position':'int', 'min_position':'int',
+            #                  'pins.delay': 'float', 'pins.dir': 'int',
+            #                  'pins.mode_pins.0': 'int', 'pins.mode_pins.1': 'int', 'pins.mode_pins.2': 'int',
+            #                  'resolution': 'int', 'step': 'int', 'step_angle': 'int',
+            #                  'position': 'int',
+            # },
+            # 'server': {'video_port': 'int', },
+            # 'zoom_slider': {'max_position':'int', 'min_position':'int', 'position': 'int'},
+        }
+        settings_widget = {
+            'camera': (preferences.camera_index, preferences.blur_threshold, preferences.name_image, preferences.name_video),
+        }
+
+        index = 0
+        for setting, items in settings_list.items():
+            # print(f'{setting}: {items}')
+            for item, type in items.items():
+                results = item.split('.')
+                len_results = len(results)
+                if len_results == 1:
+                    settings_widget[setting][index].setText(str(self._settings[setting][results[0]]))
+                elif len_results == 2:
+                    settings_widget[setting][index].setText(str(self._settings[setting][results[0]][results[1]]))
+
+                index += 1
+        # preferences.camera_index.setText(str(self._settings['camera']['index']))
+        # preferences.blur_threshold.setText(str(self._settings['camera']['blur']['threshold']))
+        # preferences.name_image.setText(self._settings['camera']['names']['image'])
+        # preferences.name_video.setText(self._settings['camera']['names']['video'])
+        preferences.buttonBox.accepted.connect(preferences.save_settings)
+        preferences._settings = self._settings
+        preferences.saved_settings.connect(self.change_settings)
+
+        widget.exec_()
 
     def _reset_server(self):
         print('Resetting server...')
@@ -700,9 +793,9 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             frame = self.camera_thread.image_raw
 
             cv2.imwrite(
-                '{dir}{name}_{id}.png'.format(dir=self._BASE_DIR + self._IMAGES_DIR, name=self._IMAGE_NAME, id=uniq_id),
+                '{dir}{name}{id}.png'.format(dir=self._BASE_DIR + self._IMAGES_DIR, name=self._IMAGE_NAME, id=uniq_id),
                 frame)
-            self.statusbar.showMessage("Saved Image: {0}_{1}.png".format(self._IMAGE_NAME, uniq_id))
+            self.statusbar.showMessage("Saved Image: {}{}.png".format(self._IMAGE_NAME, uniq_id))
         else:
             self.camera_icon.setIcon(QIcon(QPixmap(self._BASE_DIR + '{icons_dir}/icon_capture_off.png'
                                                    .format(icons_dir=self._settings['directories']['icons'])
@@ -713,12 +806,14 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
                                                )))
 
     def _update_frame(self):
+        sleep(0.01)
         frame = self.camera_thread.image_raw
         self._focus = cv2.Laplacian(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_size = 0.8
         thickness = 1
         color = (255, 255, 255)
+
 
         if self.camera.zoom == 0:
             location = (4, 20)
@@ -727,10 +822,10 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
             location = (4, 45)
             text = "Controller: {control}".format(control=self._controlled_by)
             cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
-            location = (4, 70)
-            text = f"Blurred: {self._focus}" if (
-                        self._focus < self._settings['camera']['blur']['threshold']) else f"Not Blurred: {self._focus}"
-            cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
+            # location = (4, 70)
+            # text = "Blurred: {}".format(self._focus) if (
+            #             self._focus < self._settings['camera']['blur']['threshold']) else "Not Blurred: {}".format(self._focus)
+            # cv2.putText(frame, text, location, font, font_size, color, thickness, cv2.LINE_AA)
         try:
             height, width, channel = frame.shape
             bytes_per_line = 3 * width
@@ -746,24 +841,35 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         threshold = self._settings['camera']['blur']['threshold']
         max_position = self._settings['updown_motor']['max_position']
         min_position = self._settings['updown_motor']['min_position']
+
         topped = False
         bottomed = False
+
+        focus_prev = self._focus
+        focus_diff = focus_prev - self._focus
+        print('Auto focusing')
         while self._focus < threshold:
+
+            # print(f'Focus Difference: {focus_diff}')
+            if focus_diff >= 5:
+                pass
             # Go down first then up until image is not blurred
-            if not topped and self._app_status and current_position < max_position and not current_position == max_position:  # Direction: Up
-                current_position += 1
-                # self.updown_motor.rotate('ccw')
-                sleep(0.5)
-                self._settings['updown_motor']['position'] = current_position
-                if current_position == max_position:
-                    topped = True
-            elif not bottomed and self._app_status and current_position > min_position and not current_position == min_position:  # Direction: Down
-                current_position -= 1
-                # self.updown_motor.rotate('cw')
-                sleep(0.5)
-                self._settings['updown_motor']['position'] = current_position
-                if current_position == min_position:
-                    bottomed = True
+            # if not topped and self._app_status and current_position < max_position and not current_position == max_position:  # Direction: Up
+            #     current_position += 1
+            #     if check_dependency('GPIO') is not None:
+            #         self.updown_motor.rotate('ccw')
+            #     sleep(0.5)
+            #     self._settings['updown_motor']['position'] = current_position
+            #     if current_position == max_position:
+            #         topped = True
+            # elif not bottomed and self._app_status and current_position > min_position and not current_position == min_position:  # Direction: Down
+            #     current_position -= 1
+            #     if check_dependency('GPIO') is not None:
+            #         self.updown_motor.rotate('cw')
+            #     sleep(0.5)
+            #     self._settings['updown_motor']['position'] = current_position
+            #     if current_position == min_position:
+            #         bottomed = True
 
     @pyqtSlot(int)
     def finished_leftright(self, position):
@@ -789,7 +895,7 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
     def ongoing_lens(self, index, position):
         self._settings['lens_motor']['index'] = index
         self._settings['lens_motor']['position']['dynamic'] = position
-        print(f'Lens -> Current Position: {position} at Lens: {index}')
+        # print(f'Lens -> Current Position: {position} at Lens: {index}')
 
     @pyqtSlot(int, int)
     def finished_lens(self, index, position):
@@ -809,8 +915,8 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
         self.change_lens_button.setIcon(QIcon(QPixmap(self._BASE_DIR + '{icons_dir}/icon_lens_off.png'
                                                       .format(icons_dir=self._settings['directories']['icons'])
                                                       )))
-        print(f'Saving Current Position: {position}')
-        print(f'Lens -> Lens Index: {index}')
+        # print(f'Saving Current Position: {position}')
+        # print(f'Lens -> Lens Index: {index}')
 
     @pyqtSlot()
     def started_updown(self):
@@ -821,22 +927,49 @@ class Window(QMainWindow, automi_ui.Ui_MainWindow):
 
     @pyqtSlot(int)
     def ongoing_updown(self, position):
-        print(f'Updown -> Current Position: {position}')
+        # print(f'Updown -> Current Position: {position}')
         self._settings['updown_motor']['position'] = position
 
     @pyqtSlot(int)
     def finished_updown(self, position):
         self._settings['updown_motor']['position'] = position
-        print(f'Saving last position(updown): {position}')
+        # print(f'Saving last position(updown): {position}')
         self.updown_slider.sliderPressed.connect(lambda: self.updown_worker.stop_command())
         self.updown_slider.sliderPressed.disconnect()
         self.updown_slider.sliderReleased.connect(lambda: self.updown_worker.add_command((
+            self.updown_motor,
             self.updown_slider.value(),
             self._settings['updown_motor']['position'],
             self._settings['updown_motor']['max_position'],
             self._settings['updown_motor']['min_position']
         )))
         self.updown_slider.setStyleSheet('background: #565e7c;')
+        self.updown_slider.setValue(position)
+
+    @pyqtSlot()
+    def started_autofocus(self):
+        # print('started_updown_process: Updown movement started.')
+        self.updown_slider.sliderReleased.disconnect()
+        self.updown_slider.sliderPressed.connect(lambda: self.updown_worker.stop_command())
+
+    @pyqtSlot(int)
+    def ongoing_autofocus(self, position):
+        # print(f'Updown -> Current Position: {position}')
+        self._settings['updown_motor']['position'] = position
+        self.autofocus_thread.update_focus(self._focus)
+        self.updown_slider.setDisabled(True)
+
+    @pyqtSlot(int)
+    def finished_autofocus(self, position):
+        self._settings['updown_motor']['position'] = position
+        self.updown_slider.setDisabled(False)
+        # print(f'Saving last position(updown): {position}')
+
+    @pyqtSlot(object)
+    def change_settings(self, settings):
+        self._settings = settings
+        self._save_settings()
+        self._init_settings()
 
 
 class CommunicationServerThread(QtCore.QThread):
@@ -872,6 +1005,97 @@ class CommunicationServerThread(QtCore.QThread):
                     self.received_command.emit()
             except socket.error:
                 print("Client {} disconnected".format(conn))
+
+
+class AutofocusThread(QThread):
+    started = pyqtSignal()
+    ongoing = pyqtSignal(int)
+    finished = pyqtSignal(int)
+
+    def __init__(self):
+        QtCore.QThread.__init__(self)
+        self.commands_queue = queue.Queue(1)
+        self.current_position = 0
+        self.focus = 0
+        self.threshold = 0
+        self.max_position = 0
+        self.min_position = 0
+
+        self.moving = True
+        self.running = True
+
+        self.topped = False
+        self.bottomed = False
+        self.cycle = False
+
+        self.focus_prev = 0
+        self.focus_diff = 0
+
+        self.direction = ''
+
+    def __del__(self):
+        self.wait()
+        print("Closing Lens Thread.")
+
+    def add_command(self, cmd):
+        print('Adding command')
+        self.commands_queue.put(cmd)
+        self.moving = True
+
+    def stop_command(self):
+        self.moving = False
+
+    def update_focus(self, focus):
+        self.focus = focus
+
+    def run(self):
+        print('Auto focusing')
+        while True:
+            print('Autofocus waiting for command...')
+            (self.current_position, self.focus, self.threshold, self.max_position, self.min_position) = self.commands_queue.get()
+
+            self.focus_prev = self.focus
+            self.topped = False
+            self.bottomed = False
+
+            while self.focus < self.threshold:
+                sleep(0.01)
+                self.ongoing.emit(self.current_position)
+                self.focus_diff = self.focus_prev - self.focus
+                # print(f'Current Focus: {self.focus} - Previous Focus: {self.focus_prev}')
+                # print(f'Focus Difference: {self.focus_diff}')
+                if self.focus_diff > 10:
+                    self.direction = 'up'
+                elif self.focus_diff < -10:
+                    self.direction = 'down'
+
+                # Go down first then up until image is not blurred
+                if not self.topped and self.moving and self.current_position < self.max_position:  # Direction: Up
+                    self.current_position += 10
+
+                    if check_dependency('GPIO') is not None:
+                        self.updown_motor.steps_rotate('ccw', 10)
+                        self.ongoing.emit(self.current_position)
+                    else:
+                        sleep(0.5)
+                        self.ongoing.emit(self.current_position)
+                        print('Up')
+
+                    if self.current_position >= self.max_position:
+                        self.topped = True
+                elif not self.bottomed and self.moving and self.current_position > self.min_position:  # Direction: Down
+                    self.current_position -= 10
+
+                    if check_dependency('GPIO') is not None:
+                        self.updown_motor.steps_rotate('cw', 10)
+                        self.ongoing.emit(self.current_position)
+                    else:
+                        sleep(0.5)
+                        self.ongoing.emit(self.current_position)
+                        print('Down')
+
+                    if self.current_position <= self.min_position:
+                        self.bottomed = True
 
 
 class LensThread(QThread):
@@ -918,7 +1142,7 @@ class LensThread(QThread):
                     print('Cycle complete')
                 else:
                     print('Cycle incomplete.')
-                    print(f'Current Position: {current_position} - Expected Position: {p2}')
+                    # print(f'Current Position: {current_position} - Expected Position: {p2}')
 
             elif lens_index == 1:
                 # Rotate Stepper clockwise going to lens 2
@@ -937,7 +1161,7 @@ class LensThread(QThread):
                     print('Cycle complete')
                 else:
                     print('Cycle incomplete.')
-                    print(f'Current Position: {current_position} - Expected Position: {p3}')
+                    # print(f'Current Position: {current_position} - Expected Position: {p3}')
 
             elif lens_index == 2:
                 # Rotate Stepper counter clockwise returning to lens 3
@@ -956,7 +1180,7 @@ class LensThread(QThread):
                     print('Cycle complete')
                 else:
                     print('Cycle incomplete.')
-                    print(f'Current Position: {current_position} - Expected Position: {p1}')
+                    # print(f'Current Position: {current_position} - Expected Position: {p1}')
             self.finished.emit(lens_index, current_position)
 
 
@@ -974,7 +1198,7 @@ class UpdownWorker(QThread):
 
     def stop_command(self):
         self.moving = False
-        print(f'self.moving = {self.moving}')
+        # print(f'self.moving = {self.moving}')
 
     @QtCore.pyqtSlot()
     def process_command(self):
@@ -984,7 +1208,7 @@ class UpdownWorker(QThread):
         while True:
             (motor, new_position, current_position, max_position, min_position) = self.commands_queue.get()
             self.started.emit()
-            print(f'UpdownWorker -> process_command: Setting New Position: {new_position}')
+            # print(f'UpdownWorker -> process_command: Setting New Position: {new_position}')
             if new_position >= current_position:
                 direction = "up"
                 steps = new_position - current_position
@@ -1048,22 +1272,22 @@ class ServoThread(QtCore.QThread):
                     current_position += step
                     if check_dependency('GPIO') is not None:
                         servo.set_angle(current_position)
-                    self.move_left.emit(current_position)
+                    self.move_leftright.emit(current_position)
                 elif command == 'right':
                     current_position -= step
                     if check_dependency('GPIO') is not None:
                         servo.set_angle(current_position)
-                    self.move_right.emit(current_position)
+                    self.move_leftright.emit(current_position)
                 elif command == 'forward':
                     current_position += step
                     if check_dependency('GPIO') is not None:
                         servo.set_angle(current_position)
-                    self.move_forward.emit(current_position)
+                    self.move_forwardbackward.emit(current_position)
                 elif command == 'backward':
                     current_position -= step
                     if check_dependency('GPIO') is not None:
                         servo.set_angle(current_position)
-                    self.move_backward.emit(current_position)
+                    self.move_forwardbackward.emit(current_position)
                 else:
                     print('Command not supported!')
             elif widget == 'slider':
@@ -1318,16 +1542,98 @@ class Camera:
 
 
 class PreferencesDialog(QDialog, preferences_ui.Ui_Dialog):
+    saved_settings = pyqtSignal(object)
+
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
         self.setupUi(self)
-        self._settings = {}
-        self.pushButton.clicked(lambda: self.click_me())
-        print('Initialized.')
-
-    def click_me(self):
-        print('You clicked me!')
+        self._application_settings = QSettings()
+        self._settings = self._application_settings.value('automi_settings')
         print(self._settings)
+
+    def save_settings(self):
+        print('Changing Settings...')
+        settings_list = {
+            'camera': {'index': 'int', 'blur.threshold': 'int',
+                       'names.image': 'str', 'names.video': 'str'
+                       },
+            # 'brightness_servo': {'max_position': 'int', 'min_position': 'int',
+            #                      'pin': 'int', 'position': 'int', 'ticks': 'int',
+            #                      },
+            # 'directories': {'icons': 'str', 'images': 'str', 'videos': 'str', },
+            # 'forward-backward_servo': {'pin': 'int', 'position': 'int', 'steps': 'int', },
+            # 'left-right_servo': {'pin': 'int', 'position': 'int', 'steps': 'int', },
+            # 'lens_motor': {'index': 'int', 'pins.delay': 'float', 'pins.dir': 'int',
+            #                'pins.mode_pins.0': 'int', 'pins.mode_pins.1': 'int', 'pins.mode_pins.2': 'int',
+            #                'resolution': 'int', 'step': 'int', 'step_angle': 'int',
+            #                'position.dynamic': 'int', 'position.static.0': 'int', 'position.static.1': 'int',
+            #                'position.static.2': 'int',
+            #                },
+            # 'updown_motor': {'max_position': 'int', 'min_position': 'int',
+            #                  'pins.delay': 'float', 'pins.dir': 'int',
+            #                  'pins.mode_pins.0': 'int', 'pins.mode_pins.1': 'int', 'pins.mode_pins.2': 'int',
+            #                  'resolution': 'int', 'step': 'int', 'step_angle': 'int',
+            #                  'position': 'int',
+            #                  },
+            # 'server': {'video_port': 'int', },
+            # 'zoom_slider': {'max_position': 'int', 'min_position': 'int', 'position': 'int'},
+        }
+        settings_widget = {
+            'camera': (self.camera_index, self.blur_threshold, self.name_image, self.name_video),
+        }
+
+        index = 0
+        for setting, items in settings_list.items():
+            # print(f'{setting}: {items}')
+            for item, type in items.items():
+                results = item.split('.')
+                len_results = len(results)
+                if len_results == 1:
+                    results[0] = convert(results[0])
+                    self._settings[setting][results[0]] = convert(settings_widget[setting][index].text())
+                elif len_results == 2:
+                    results[0] = convert(results[0])
+                    results[1] = convert(results[1])
+                    self._settings[setting][results[0]][results[1]] = convert(settings_widget[setting][index].text())
+                elif len_results == 3:
+                    results[0] = convert(results[0])
+                    results[1] = convert(results[1])
+                    results[2] = convert(results[2])
+                    self._settings[setting][results[0]][results[1]][results[2]] = convert(settings_widget[setting][index].text())
+                # if type == 'str':
+                #     if len_results == 1:
+                #         self._settings[setting][results[0]] = settings_widget[setting][index].text()
+                #     elif len_results == 2:
+                #         self._settings[setting][results[0]][results[1]] = settings_widget[setting][index].text()
+                #     elif len_results == 3:
+                #         results[2] = convert(results[2])
+                #         self._settings[setting][results[0]][results[1]][results[2]] = settings_widget[setting][index].text()
+                # elif type == 'float':
+                #     if len_results == 1:
+                #         self._settings[setting][results[0]] = float(settings_widget[setting][index].text())
+                #     elif len_results == 2:
+                #         self._settings[setting][results[0]][results[1]] = float(settings_widget[setting][index].text())
+                #     elif len_results == 3:
+                #         results[2] = convert(results[2])
+                #         self._settings[setting][results[0]][results[1]][results[2]] = float(settings_widget[setting][
+                #             index].text())
+                # else:
+                #     if len_results == 1:
+                #         self._settings[setting][results[0]] = int(settings_widget[setting][index].text())
+                #     elif len_results == 2:
+                #         self._settings[setting][results[0]][results[1]] = int(settings_widget[setting][index].text())
+                #     elif len_results == 3:
+                #         results[2] = convert(results[2])
+                #         self._settings[setting][results[0]][results[1]][results[2]] = int(settings_widget[setting][index].text())
+                index += 1
+
+        # self._settings['camera']['names']['image'] = self.name_image.text()
+        # self._settings['camera']['names']['video'] = self.name_video.text()
+        # self._settings['camera']['index'] = int(self.camera_index.text())
+        # self._settings['camera']['blur']['threshold'] = int(self.blur_threshold.text())
+        print(self._settings)
+        self.saved_settings.emit(self._settings)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

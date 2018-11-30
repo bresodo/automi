@@ -436,6 +436,7 @@
     </property>
     <addaction name="action_connect_hdmi"/>
     <addaction name="action_preferences"/>
+    <addaction name="action_autofocus"/>
    </widget>
    <widget class="QMenu" name="connected_devices_menu">
     <property name="title">
@@ -484,6 +485,11 @@
   <action name="action_preferences">
    <property name="text">
     <string>Preferences</string>
+   </property>
+  </action>
+  <action name="action_autofocus">
+   <property name="text">
+    <string>Auto Focus</string>
    </property>
   </action>
  </widget>

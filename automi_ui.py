@@ -362,8 +362,11 @@ class Ui_MainWindow(object):
         self.actionSet_Preferences.setObjectName("actionSet_Preferences")
         self.action_preferences = QtWidgets.QAction(MainWindow)
         self.action_preferences.setObjectName("action_preferences")
+        self.action_autofocus = QtWidgets.QAction(MainWindow)
+        self.action_autofocus.setObjectName("action_autofocus")
         self.menu_menu.addAction(self.action_connect_hdmi)
         self.menu_menu.addAction(self.action_preferences)
+        self.menu_menu.addAction(self.action_autofocus)
         self.menubar.addAction(self.menu_menu.menuAction())
         self.menubar.addAction(self.connected_devices_menu.menuAction())
 
@@ -384,6 +387,7 @@ class Ui_MainWindow(object):
         self.actionTurn_OFF_2.setText(_translate("MainWindow", "Turn OFF"))
         self.actionSet_Preferences.setText(_translate("MainWindow", "Set Preferences"))
         self.action_preferences.setText(_translate("MainWindow", "Preferences"))
+        self.action_autofocus.setText(_translate("MainWindow", "Auto Focus"))
 
 
 if __name__ == "__main__":

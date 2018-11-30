@@ -8,9 +8,13 @@
     },
     "camera": {
         "blur": {
-            "threshold": 100
+            "threshold": 820
         },
-        "index": 0
+        "index": 0,
+        "names": {
+            "image": "img_",
+            "video": "vid_"
+        }
     },
     "directories": {
         "icons": "icons/",
@@ -50,11 +54,14 @@
             ]
         }
     },
+    "server": {
+        "video_port": 9766
+    },
     "updown_motor": {
         "max_position": 200,
         "min_position": 0,
         "pins": {
-            "delay": 2.08e-05,
+            "delay": 0.0208,
             "dir": 21,
             "mode_pins": [
                 13,
@@ -65,9 +72,8 @@
             "step": 20,
             "step_angle": 1.8
         },
-        "position": 50
+        "position": 56
     },
-    "video_port": 9766,
     "zoom_slider": {
         "max_position": 180,
         "min_position": 0,
